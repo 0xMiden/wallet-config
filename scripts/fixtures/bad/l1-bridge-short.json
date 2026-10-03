@@ -1,0 +1,1 @@
+{"_expect": "agglayer.l1Bridge must be a 20-byte 0x address", "network": "testnet", "version": 1, "agglayer": {"l1Bridge": "0x1348947e"}}

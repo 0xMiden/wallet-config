@@ -1,0 +1,1 @@
+{"_expect": "features.earn must be true or false", "network": "testnet", "version": 1, "features": {"earn": "true"}}

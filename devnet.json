@@ -1,0 +1,5 @@
+{
+  "network": "devnet",
+  "version": 1,
+  "features": { "earn": false, "fastBridge": false, "bridgeIn": false, "bridgeOut": false }
+}

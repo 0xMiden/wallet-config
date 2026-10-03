@@ -1,0 +1,1 @@
+{"_expect": "epoch.allocatorUrl must use https:", "network": "testnet", "version": 1, "epoch": {"allocatorUrl": "http://127.0.0.1:8548"}}

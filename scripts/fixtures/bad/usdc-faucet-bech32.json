@@ -1,0 +1,1 @@
+{"_expect": "epoch.midenUsdcFaucet must be a 15-byte 0x account id", "network": "testnet", "version": 1, "epoch": {"midenUsdcFaucet": "mtst1aq9nwte8xh3nayfpdkv4hu5mjy90arem"}}

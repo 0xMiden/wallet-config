@@ -1,0 +1,1 @@
+{"_expect": "features.bridgeIn is on but agglayer.indexerUrl is missing or unsupported", "network": "testnet", "version": 1, "evm": {"chainId": 11155111}, "agglayer": {"l1Bridge": "0x1348947e282138d8f377b467f7d9c2eb0f335d1f", "midenBridge": "0x3b66e20b5088f25133b69216484652"}, "features": {"bridgeIn": true}}

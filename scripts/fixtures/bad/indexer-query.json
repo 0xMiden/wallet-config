@@ -1,0 +1,1 @@
+{"_expect": "agglayer.indexerUrl must not carry credentials, a query or a fragment", "network": "testnet", "version": 1, "agglayer": {"indexerUrl": "https://miden-testnet-bridge.dev.eu-north-3.gateway.fm/api?x=1"}}

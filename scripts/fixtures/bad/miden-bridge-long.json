@@ -1,0 +1,1 @@
+{"_expect": "agglayer.midenBridge must be a 15-byte 0x account id", "network": "testnet", "version": 1, "agglayer": {"midenBridge": "0x3b66e20b5088f25133b6921648465200"}}

@@ -1,0 +1,1 @@
+{"_expect": "features.fastBridge is on but evm.chainId is missing or unsupported", "network": "testnet", "version": 1, "evm": {"chainId": 1}, "epoch": {"allocatorUrl": "https://testnet-dev.epochprotocol.xyz", "midenUsdcFaucet": "0x537c15a622074e91188aa894456c52", "evmUsdc": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69"}, "features": {"fastBridge": true}}

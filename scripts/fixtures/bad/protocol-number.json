@@ -1,0 +1,1 @@
+{"_expect": "epoch.earnProtocol must be a string", "network": "testnet", "version": 1, "epoch": {"earnProtocol": 1}}
