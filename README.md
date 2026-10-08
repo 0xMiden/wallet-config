@@ -23,11 +23,13 @@ Per-network Epoch and Agglayer settings the Miden wallet reads at runtime from
 | `features.fastBridge` | Switch for new Fast (Epoch) bridges, in and out. |
 | `features.bridgeIn` | Switch for new Slow (Agglayer) bridges from EVM to Miden. |
 | `features.bridgeOut` | Switch for new Slow (Agglayer) bridges from Miden to EVM. |
+| `mainnetCountdown.enabled` | Switch for the banner above every page of the open wallet that counts down to the mainnet launch and links to the early-access list. |
+| `mainnetCountdown.launchAt` | The moment the countdown reaches zero, as an RFC 3339 UTC timestamp (`2026-10-26T00:00:00Z`). Required while the switch is on. The wallet hides the banner once it has passed. |
 
 Everything else (rollup id, bridgeable tokens, decimals, symbols, the Earn market, service health)
-the wallet reads from chain and from the services themselves. `agglayer` and `epoch` are optional,
-and so is every field inside them; a missing switch is off. Unknown fields are ignored, so a field
-can be added before older wallets understand it.
+the wallet reads from chain and from the services themselves. `agglayer`, `epoch` and
+`mainnetCountdown` are optional, and so is every field inside them; a missing switch is off. Unknown
+fields are ignored, so a field can be added before older wallets understand it.
 
 ## What a switch does
 
@@ -35,6 +37,9 @@ A switch that is `false` greys out the entry point for **new** Earn deposits, Fa
 bridges in that direction. It never blocks Withdraw (Earn), Claim (Agglayer, on L1) or Reclaim
 (Epoch): those recover funds, and the wallet never greys them out.
 A switch also never changes a transfer already in flight: each one keeps the ids it started with.
+
+`mainnetCountdown.enabled` is a plain display switch: on, every open wallet on the network shows the
+countdown banner until `launchAt`; off, none does. It greys nothing out.
 
 ## Publishing
 

@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 1,
+  "version": 2,
   "evm": { "chainId": 11155111 },
   "agglayer": {
     "l1Bridge": "0x1348947e282138d8f377b467f7d9c2eb0f335d1f",
@@ -14,5 +14,6 @@
     "evmUsdc": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
     "earnProtocol": "dummy-lending"
   },
-  "features": { "earn": true, "fastBridge": true, "bridgeIn": true, "bridgeOut": true }
+  "features": { "earn": true, "fastBridge": true, "bridgeIn": true, "bridgeOut": true },
+  "mainnetCountdown": { "enabled": true, "launchAt": "2026-10-26T00:00:00Z" }
 }

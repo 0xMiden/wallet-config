@@ -1,0 +1,1 @@
+{"_expect": "mainnetCountdown.enabled must be true or false", "network": "testnet", "version": 1, "mainnetCountdown": {"enabled": "true", "launchAt": "2026-10-26T00:00:00Z"}}

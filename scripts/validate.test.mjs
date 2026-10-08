@@ -95,6 +95,29 @@ describe('parseBridgeConfig', () => {
     assert.deepEqual(config.features, { earn: false, fastBridge: false, bridgeIn: false, bridgeOut: false });
     assert.deepEqual(config.agglayer, { l1Bridge: undefined, midenBridge: undefined, indexerUrl: undefined });
   });
+
+  it('reads a missing mainnetCountdown section as off with no moment', () => {
+    const config = parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet');
+    assert.deepEqual(config.mainnetCountdown, { enabled: false, launchAt: undefined });
+  });
+
+  it('reads the countdown switch and its moment', () => {
+    const config = parseBridgeConfig(readFixture('good', 'testnet-countdown.json'), 'testnet');
+    assert.deepEqual(config.mainnetCountdown, { enabled: true, launchAt: '2026-10-26T00:00:00Z' });
+  });
+
+  it('refuses a countdown moment in any spelling but RFC 3339 UTC', () => {
+    for (const launchAt of ['2026-10-26', '2026-10-26T00:00:00+02:00', '2026-10-26 00:00:00Z', 1_792_000_000_000, '2026-13-40T00:00:00Z']) {
+      const body = { network: 'testnet', version: 1, mainnetCountdown: { enabled: true, launchAt } };
+      const { errors } = parseBridgeConfigDetailed(body, 'testnet');
+      assert.ok(errors.some(e => e.startsWith('mainnetCountdown.launchAt must be')), `${launchAt}: ${errors}`);
+    }
+  });
+
+  it('accepts a countdown moment with fractional seconds', () => {
+    const body = { network: 'testnet', version: 1, mainnetCountdown: { enabled: true, launchAt: '2026-10-26T00:00:00.000Z' } };
+    assert.equal(parseBridgeConfig(body, 'testnet').mainnetCountdown.launchAt, '2026-10-26T00:00:00.000Z');
+  });
 });
 
 describe('versionError', () => {

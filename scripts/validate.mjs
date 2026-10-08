@@ -24,6 +24,8 @@ export const SUPPORTED_EARN_PROTOCOLS = ['dummy-lending'];
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
+/** An RFC 3339 timestamp in UTC, such as 2026-10-26T00:00:00Z: one spelling, so every wallet reads the same instant. */
+const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 /** Miden node per network, as the wallet's src/lib/miden-chain/networks-config.ts has it. */
 export const MIDEN_RPC = {
@@ -174,8 +176,23 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     else errors.push(`features.${name} must be true or false`);
   }
 
+  const countdownIn = readSection(body, 'mainnetCountdown', errors);
+  const mainnetCountdown = { enabled: false, launchAt: undefined };
+  if (countdownIn.enabled !== undefined) {
+    if (typeof countdownIn.enabled === 'boolean') mainnetCountdown.enabled = countdownIn.enabled;
+    else errors.push('mainnetCountdown.enabled must be true or false');
+  }
+  if (countdownIn.launchAt !== undefined) {
+    const launchAt = countdownIn.launchAt;
+    if (typeof launchAt !== 'string' || !UTC_TIMESTAMP.test(launchAt) || Number.isNaN(Date.parse(launchAt))) {
+      errors.push('mainnetCountdown.launchAt must be an RFC 3339 UTC timestamp such as 2026-10-26T00:00:00Z');
+    } else {
+      mainnetCountdown.launchAt = launchAt;
+    }
+  }
+
   if (errors.length > 0) return { config: null, errors, dropped };
-  return { config: { network, version, evm, agglayer, epoch, features }, errors, dropped };
+  return { config: { network, version, evm, agglayer, epoch, features, mainnetCountdown }, errors, dropped };
 }
 
 export function parseBridgeConfig(body, network, options) {
@@ -212,6 +229,10 @@ export function switchErrors(config) {
         errors.push(`features.${name} is on but ${field} is missing or unsupported`);
       }
     }
+  }
+  // The countdown banner has nothing to count down to without its moment.
+  if (config.mainnetCountdown.enabled && config.mainnetCountdown.launchAt === undefined) {
+    errors.push('mainnetCountdown.enabled is on but mainnetCountdown.launchAt is missing');
   }
   return errors;
 }
