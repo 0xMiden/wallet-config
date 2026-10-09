@@ -14,5 +14,6 @@
     "evmUsdc": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
     "earnProtocol": "dummy-lending"
   },
-  "features": { "earn": true, "fastBridge": true, "bridgeIn": true, "bridgeOut": true }
+  "features": { "earn": true, "fastBridge": true, "bridgeIn": true, "bridgeOut": true },
+  "mainnetCountdown": { "enabled": true, "launchAt": "2026-10-26T16:00:00Z" }
 }
