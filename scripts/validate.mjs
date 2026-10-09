@@ -10,8 +10,8 @@
  * Three layers, in order: the wallet's own parse rules (ported from the wallet's
  * src/lib/remote-config/schema.ts; the two must agree on every rule), the repo rules (file name,
  * version bump, a switched-on feature has every value it needs), and a deploy smoke test that, for
- * every switched-on feature, finds its Miden accounts and EVM contracts on chain and gets an answer
- * from its services' health routes. No dependencies: Node 22 only.
+ * every switched-on feature, finds its EVM contracts on chain and gets an answer from its services'
+ * health routes. No dependencies: Node 22 only.
  */
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -25,12 +25,6 @@ export const SUPPORTED_EARN_PROTOCOLS = ['dummy-lending'];
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
 
-/** Miden node per network, as the wallet's src/lib/miden-chain/networks-config.ts has it. */
-export const MIDEN_RPC = {
-  testnet: 'https://rpc.testnet.miden.io',
-  devnet: 'https://rpc.devnet.miden.io'
-};
-
 /** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
 export const EVM_RPCS = {
   11155111: [
@@ -40,7 +34,6 @@ export const EVM_RPCS = {
   ]
 };
 
-const REGISTRY_SLOT = 'agglayer::bridge::faucet_registry_map';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 const isRecord = value => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -250,12 +243,6 @@ export function plannedChecks(config) {
       url: `${epoch.allocatorUrl}/health`,
       healthy: body => body?.status === 'healthy'
     });
-    add({
-      key: `miden:${epoch.midenUsdcFaucet}`,
-      kind: 'miden-account',
-      label: 'Miden USDC faucet',
-      id: epoch.midenUsdcFaucet
-    });
     add({ key: `code:${epoch.evmUsdc}`, kind: 'evm-code', label: 'EVM USDC', address: epoch.evmUsdc });
     add({
       key: 'evm-usdc-decimals',
@@ -275,12 +262,6 @@ export function plannedChecks(config) {
     });
   }
   if (agglayerOn) {
-    add({
-      key: `registry:${agglayer.midenBridge}`,
-      kind: 'miden-registry',
-      label: 'Miden bridge registry',
-      id: agglayer.midenBridge
-    });
     add({ key: `code:${agglayer.l1Bridge}`, kind: 'evm-code', label: 'L1 bridge', address: agglayer.l1Bridge });
     add({
       key: 'l1-network-id',
@@ -338,131 +319,7 @@ export async function evmRpc(chainId, method, params, fetchImpl) {
   throw new Error(`no RPC for chain ${chainId} answered ${method}: ${failures.join('; ')}`);
 }
 
-// `rpc.Api/GetAccount` with no accept header, which the node accepts for any client version. The
-// request fields are the same in node 0.16 and 0.17 (account_id = 1 { id = 1 }, details = 3).
-
-function varint(value) {
-  const out = [];
-  let n = value;
-  while (n > 0x7f) {
-    out.push((n & 0x7f) | 0x80);
-    n >>>= 7;
-  }
-  out.push(n);
-  return Buffer.from(out);
-}
-
-const lengthDelimited = (fieldNo, payload) =>
-  Buffer.concat([varint((fieldNo << 3) | 2), varint(payload.length), payload]);
-
-/** The GetAccount request body, framed for gRPC-web. With `mapSlot`, asks for that storage map whole. */
-export function getAccountFrame(accountIdHex, mapSlot) {
-  const id = Buffer.from(accountIdHex.slice(2), 'hex');
-  let details = Buffer.alloc(0);
-  if (mapSlot !== undefined) {
-    const mapRequest = Buffer.concat([lengthDelimited(1, Buffer.from(mapSlot, 'utf8')), Buffer.from([0x10, 0x01])]);
-    details = lengthDelimited(4, lengthDelimited(1, mapRequest));
-  }
-  const message = Buffer.concat([lengthDelimited(1, lengthDelimited(1, id)), lengthDelimited(3, details)]);
-  const header = Buffer.alloc(5);
-  header.writeUInt32BE(message.length, 1);
-  return Buffer.concat([header, message]);
-}
-
-function* protoFields(buffer) {
-  let offset = 0;
-  const readVarint = () => {
-    let value = 0n;
-    let shift = 0n;
-    let byte;
-    do {
-      byte = buffer[offset++];
-      if (byte === undefined) throw new Error('truncated protobuf');
-      value |= BigInt(byte & 0x7f) << shift;
-      shift += 7n;
-    } while (byte & 0x80);
-    return value;
-  };
-  while (offset < buffer.length) {
-    const key = Number(readVarint());
-    const fieldNo = key >>> 3;
-    const wireType = key & 7;
-    if (wireType === 0) yield [fieldNo, readVarint()];
-    else if (wireType === 1) {
-      yield [fieldNo, buffer.readBigUInt64LE(offset)];
-      offset += 8;
-    } else if (wireType === 5) {
-      yield [fieldNo, buffer.readUInt32LE(offset)];
-      offset += 4;
-    } else if (wireType === 2) {
-      const length = Number(readVarint());
-      yield [fieldNo, buffer.subarray(offset, offset + length)];
-      offset += length;
-    } else throw new Error(`unsupported protobuf wire type ${wireType}`);
-  }
-}
-
-const fieldsNamed = (buffer, fieldNo) => [...protoFields(buffer)].filter(([no]) => no === fieldNo).map(([, v]) => v);
-
-/** Splits a gRPC-web body into its message and the grpc-status it ends with. */
-export function readGrpcWeb(headers, body) {
-  let message = null;
-  let status = headers.get('grpc-status');
-  let statusMessage = headers.get('grpc-message');
-  let offset = 0;
-  while (offset + 5 <= body.length) {
-    const flag = body[offset];
-    const length = body.readUInt32BE(offset + 1);
-    const frame = body.subarray(offset + 5, offset + 5 + length);
-    if (flag & 0x80) {
-      for (const line of frame.toString('utf8').split('\r\n')) {
-        const [name, ...rest] = line.split(':');
-        if (name === 'grpc-status') status = rest.join(':').trim();
-        if (name === 'grpc-message') statusMessage = rest.join(':').trim();
-      }
-    } else message = frame;
-    offset += 5 + length;
-  }
-  return { message, status, statusMessage: statusMessage === null ? '' : decodeURIComponent(statusMessage) };
-}
-
-/** Counts registry entries whose value word starts with 1 (registered), from a GetAccount reply. */
-export function countRegisteredFaucets(message, slot = REGISTRY_SLOT) {
-  let registered = 0;
-  for (const details of fieldsNamed(message, 3)) {
-    for (const storage of fieldsNamed(details, 2)) {
-      for (const map of fieldsNamed(storage, 2)) {
-        if (fieldsNamed(map, 1)[0]?.toString('utf8') !== slot) continue;
-        if (fieldsNamed(map, 2).some(tooMany => tooMany === 1n))
-          throw new Error(`${slot} has too many entries to read whole`);
-        for (const all of fieldsNamed(map, 3)) {
-          for (const entry of fieldsNamed(all, 1)) {
-            const value = fieldsNamed(entry, 2)[0];
-            const first = value === undefined ? undefined : fieldsNamed(value, 1)[0];
-            if (first === 1n) registered++;
-          }
-        }
-      }
-    }
-  }
-  return registered;
-}
-
-export async function midenGetAccount(rpcUrl, accountIdHex, mapSlot, fetchImpl) {
-  const res = await fetchWithTimeout(fetchImpl, `${rpcUrl}/rpc.Api/GetAccount`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/grpc-web+proto', 'x-grpc-web': '1' },
-    body: getAccountFrame(accountIdHex, mapSlot)
-  });
-  if (res.status !== 200) return { state: 'error', detail: `HTTP ${res.status}` };
-  const { message, status, statusMessage } = readGrpcWeb(res.headers, Buffer.from(await res.arrayBuffer()));
-  if (status === '0' && message !== null) return { state: 'ok', message };
-  if (status === '5' || /not found/i.test(statusMessage)) return { state: 'absent', detail: statusMessage };
-  return { state: 'error', detail: `grpc-status ${status ?? 'missing'}: ${statusMessage}` };
-}
-
 async function runCheck(check, config, fetchImpl) {
-  const midenRpc = MIDEN_RPC[config.network];
   switch (check.kind) {
     case 'http':
       return httpHealth(check, fetchImpl);
@@ -488,25 +345,6 @@ async function runCheck(check, config, fetchImpl) {
       return /^0x[0-9a-fA-F]{64}$/.test(result)
         ? { ok: true, detail: `answers ${BigInt(result)}` }
         : { ok: false, detail: `answered ${result.slice(0, 80)}, not a uint` };
-    }
-    case 'miden-account':
-    case 'miden-registry': {
-      if (midenRpc === undefined)
-        return { ok: false, detail: `no Miden RPC known for "${config.network}"; add it to MIDEN_RPC` };
-      const reply = await midenGetAccount(
-        midenRpc,
-        check.id,
-        check.kind === 'miden-registry' ? REGISTRY_SLOT : undefined,
-        fetchImpl
-      );
-      if (reply.state === 'absent')
-        return { ok: false, detail: `${check.id} does not exist on ${config.network} (${reply.detail})` };
-      if (reply.state === 'error') return { ok: false, detail: `${check.id}: ${reply.detail}` };
-      if (check.kind === 'miden-account') return { ok: true, detail: `${check.id} exists` };
-      const registered = countRegisteredFaucets(reply.message);
-      return registered > 0
-        ? { ok: true, detail: `${check.id} registers ${registered} faucet(s)` }
-        : { ok: false, detail: `${check.id} registers no faucet` };
     }
     default:
       return { ok: false, detail: `unknown check kind ${check.kind}` };

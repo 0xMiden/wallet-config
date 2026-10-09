@@ -40,8 +40,8 @@ A switch also never changes a transfer already in flight: each one keeps the ids
 
 1. Edit the values and bump `version`. Going back to older values is a new, higher version too.
 2. Open a pull request. `validate` checks the document against the wallet's own rules, the version
-   bump against `main`, and, for every switch that is on, that the accounts and contracts exist on
-   their chains and the services answer their health routes.
+   bump against `main`, and, for every switch that is on, that the contracts exist on the EVM chain
+   and the services answer their health routes.
 3. Merge (squash). Wallets pick it up within about an hour plus the raw CDN cache (about 5 minutes);
    a wallet showing a greyed-out control re-checks every minute.
 
