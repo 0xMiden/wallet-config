@@ -169,6 +169,20 @@ describe('parseBridgeConfig', () => {
     const body = { network: 'testnet', version: 1, mainnetCountdown: { enabled: true, launchAt: '2026-10-26T00:00:00.000Z' } };
     assert.equal(parseBridgeConfig(body, 'testnet').mainnetCountdown.launchAt, Date.parse('2026-10-26T00:00:00.000Z'));
   });
+
+  it('reads a missing onboarding section, or one without inviteOnly, as no Welcome choice', () => {
+    assert.deepEqual(parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet').onboarding, {});
+    const body = { network: 'testnet', version: 1, onboarding: {} };
+    assert.deepEqual(parseBridgeConfig(body, 'testnet').onboarding, {});
+  });
+
+  it('reads the invite-only switch either way', () => {
+    assert.deepEqual(parseBridgeConfig(readFixture('good', 'testnet-onboarding.json'), 'testnet').onboarding, {
+      inviteOnly: true
+    });
+    const body = { network: 'testnet', version: 1, onboarding: { inviteOnly: false } };
+    assert.deepEqual(parseBridgeConfig(body, 'testnet').onboarding, { inviteOnly: false });
+  });
 });
 
 describe('versionError', () => {
