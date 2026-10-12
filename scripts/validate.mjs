@@ -202,8 +202,21 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
 
   const mainnetCountdown = readCountdown(body.mainnetCountdown);
 
+  // The wallet's onboarding read (schema.ts): absent means the wallet's own default, a wrong type
+  // rejects the document.
+  const onboardingIn = readSection(body, 'onboarding', errors);
+  const onboarding = {};
+  if (onboardingIn.inviteOnly !== undefined) {
+    if (typeof onboardingIn.inviteOnly === 'boolean') onboarding.inviteOnly = onboardingIn.inviteOnly;
+    else errors.push('onboarding.inviteOnly must be true or false');
+  }
+
   if (errors.length > 0) return { config: null, errors, dropped };
-  return { config: { network, version, evm, agglayer, epoch, features, swap, mainnetCountdown }, errors, dropped };
+  return {
+    config: { network, version, evm, agglayer, epoch, features, swap, mainnetCountdown, onboarding },
+    errors,
+    dropped
+  };
 }
 
 /**
