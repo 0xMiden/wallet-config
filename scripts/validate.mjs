@@ -10,8 +10,8 @@
  * Three layers, in order: the wallet's own parse rules (ported from the wallet's
  * src/lib/remote-config/schema.ts; the two must agree on every rule), the repo rules (file name,
  * version bump, a switched-on feature has every value it needs), and a deploy smoke test that, for
- * every switched-on feature, finds its Miden accounts and EVM contracts on chain and gets an answer
- * from its services' health routes. No dependencies: Node 22 only.
+ * every switched-on feature, finds its EVM contracts on chain and gets an answer from its services'
+ * health routes. No dependencies: Node 22 only.
  */
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -21,17 +21,20 @@ import { fileURLToPath } from 'node:url';
 export const BRIDGE_SWITCHES = ['earn', 'fastBridge', 'bridgeIn', 'bridgeOut'];
 export const SUPPORTED_EVM_CHAIN_IDS = [11155111];
 export const SUPPORTED_EARN_PROTOCOLS = ['dummy-lending'];
+/** The marks the wallet ships for a swap token's logo (components/TokenLogo). */
+export const SUPPORTED_SWAP_TOKEN_LOGOS = ['MIDEN', 'ETH', 'USDC', 'BTC'];
+/** The assets the wallet's price feed quotes (lib/prices/constant.ts KNOWN_SYMBOLS). */
+export const SUPPORTED_PRICE_SYMBOLS = ['ETH', 'BTC', 'USDC'];
+/** A fungible faucet's decimals: the protocol allows up to 12 (miden-objects BasicFungibleFaucet::MAX_DECIMALS). */
+export const MAX_SWAP_TOKEN_DECIMALS = 12;
+/** The swap form opens on the first two tokens, so a list needs at least two. */
+export const MIN_SWAP_TOKENS = 2;
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
-/** An RFC 3339 timestamp in UTC, such as 2026-10-26T00:00:00Z: one spelling, so every wallet reads the same instant. */
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
-
-/** Miden node per network, as the wallet's src/lib/miden-chain/networks-config.ts has it. */
-export const MIDEN_RPC = {
-  testnet: 'https://rpc.testnet.miden.io',
-  devnet: 'https://rpc.devnet.miden.io'
-};
+// A token symbol as the protocol's TokenSymbol allows it: 1 to 6 upper-case ASCII letters.
+const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
 
 /** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
 export const EVM_RPCS = {
@@ -42,7 +45,6 @@ export const EVM_RPCS = {
   ]
 };
 
-const REGISTRY_SLOT = 'agglayer::bridge::faucet_registry_map';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 const isRecord = value => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -176,6 +178,12 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     else errors.push(`features.${name} must be true or false`);
   }
 
+  const swapIn = readSection(body, 'swap', errors);
+  const swap = {
+    tokens: readSwapTokens(swapIn.tokens, errors, dropped),
+    etaUrl: readUrl(swapIn, 'swap', 'etaUrl', allowLocalHttp, errors)
+  };
+
   const countdownIn = readSection(body, 'mainnetCountdown', errors);
   const mainnetCountdown = { enabled: false, launchAt: undefined };
   if (countdownIn.enabled !== undefined) {
@@ -184,7 +192,8 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   }
   if (countdownIn.launchAt !== undefined) {
     const launchAt = countdownIn.launchAt;
-    if (typeof launchAt !== 'string' || !UTC_TIMESTAMP.test(launchAt) || Number.isNaN(Date.parse(launchAt))) {
+    const parsed = typeof launchAt === 'string' && UTC_TIMESTAMP.test(launchAt) ? Date.parse(launchAt) : NaN;
+    if (Number.isNaN(parsed) || new Date(parsed).toISOString().slice(0, 19) !== launchAt.slice(0, 19)) {
       errors.push('mainnetCountdown.launchAt must be an RFC 3339 UTC timestamp such as 2026-10-26T00:00:00Z');
     } else {
       mainnetCountdown.launchAt = launchAt;
@@ -192,7 +201,78 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   }
 
   if (errors.length > 0) return { config: null, errors, dropped };
-  return { config: { network, version, evm, agglayer, epoch, features, mainnetCountdown }, errors, dropped };
+  return { config: { network, version, evm, agglayer, epoch, features, swap, mainnetCountdown }, errors, dropped };
+}
+
+/**
+ * The wallet's swap registry (schema.ts readSwapTokens): the list the swap token picker shows, in
+ * order. A bad entry rejects the document; a logo or price symbol the wallet lacks is dropped from
+ * its entry only. Absent means no swap tokens, so the wallet shows Swap as unavailable.
+ */
+function readSwapTokens(value, errors, dropped) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    errors.push('swap.tokens must be an array');
+    return [];
+  }
+  const tokens = [];
+  value.forEach((entry, index) => {
+    const label = `swap.tokens[${index}]`;
+    if (!isRecord(entry)) {
+      errors.push(`${label} must be an object`);
+      return;
+    }
+    const { symbol, decimals } = entry;
+    if (typeof symbol !== 'string' || !TOKEN_SYMBOL.test(symbol)) {
+      errors.push(`${label}.symbol must be 1 to 6 upper-case letters`);
+    }
+    const faucetId = readPattern(entry, label, 'faucetId', MIDEN_ACCOUNT_ID, 'a 15-byte 0x account id', errors);
+    if (faucetId === undefined && entry.faucetId === undefined) errors.push(`${label}.faucetId is required`);
+    if (!Number.isSafeInteger(decimals) || decimals < 0 || decimals > MAX_SWAP_TOKEN_DECIMALS) {
+      errors.push(`${label}.decimals must be an integer from 0 to ${MAX_SWAP_TOKEN_DECIMALS}`);
+    }
+    const token = { symbol, faucetId, decimals };
+    if (entry.logo !== undefined) {
+      if (typeof entry.logo !== 'string') errors.push(`${label}.logo must be a string`);
+      else if (SUPPORTED_SWAP_TOKEN_LOGOS.includes(entry.logo)) token.logo = entry.logo;
+      else dropped.push(`${label}.logo "${entry.logo}" is not a mark the wallet ships`);
+    }
+    if (entry.priceSymbol !== undefined) {
+      if (typeof entry.priceSymbol !== 'string') errors.push(`${label}.priceSymbol must be a string`);
+      else if (SUPPORTED_PRICE_SYMBOLS.includes(entry.priceSymbol)) token.priceSymbol = entry.priceSymbol;
+      else dropped.push(`${label}.priceSymbol "${entry.priceSymbol}" is not an asset the wallet's price feed quotes`);
+    }
+    tokens.push(token);
+  });
+  const faucetIds = new Set();
+  const symbols = new Set();
+  for (const token of tokens) {
+    if (token.faucetId !== undefined && faucetIds.has(token.faucetId)) {
+      errors.push(`swap.tokens names faucet ${token.faucetId} twice`);
+    }
+    if (typeof token.symbol === 'string' && symbols.has(token.symbol)) {
+      errors.push(`swap.tokens names symbol ${token.symbol} twice`);
+    }
+    faucetIds.add(token.faucetId);
+    symbols.add(token.symbol);
+  }
+  return tokens;
+}
+
+/**
+ * Repo rules, not parse rules: one swap token gives the wallet nothing to open the form on, and a
+ * list without the quote service leaves every pair unquoted.
+ */
+export function swapErrors(config) {
+  const errors = [];
+  const count = config.swap.tokens.length;
+  if (count > 0 && count < MIN_SWAP_TOKENS) {
+    errors.push(`swap.tokens must name at least ${MIN_SWAP_TOKENS} tokens, or none`);
+  }
+  if (count > 0 && config.swap.etaUrl === undefined) {
+    errors.push('swap.tokens is set but swap.etaUrl is missing');
+  }
+  return errors;
 }
 
 export function parseBridgeConfig(body, network, options) {
@@ -230,7 +310,6 @@ export function switchErrors(config) {
       }
     }
   }
-  // The countdown banner has nothing to count down to without its moment.
   if (config.mainnetCountdown.enabled && config.mainnetCountdown.launchAt === undefined) {
     errors.push('mainnetCountdown.enabled is on but mainnetCountdown.launchAt is missing');
   }
@@ -271,12 +350,6 @@ export function plannedChecks(config) {
       url: `${epoch.allocatorUrl}/health`,
       healthy: body => body?.status === 'healthy'
     });
-    add({
-      key: `miden:${epoch.midenUsdcFaucet}`,
-      kind: 'miden-account',
-      label: 'Miden USDC faucet',
-      id: epoch.midenUsdcFaucet
-    });
     add({ key: `code:${epoch.evmUsdc}`, kind: 'evm-code', label: 'EVM USDC', address: epoch.evmUsdc });
     add({
       key: 'evm-usdc-decimals',
@@ -296,12 +369,6 @@ export function plannedChecks(config) {
     });
   }
   if (agglayerOn) {
-    add({
-      key: `registry:${agglayer.midenBridge}`,
-      kind: 'miden-registry',
-      label: 'Miden bridge registry',
-      id: agglayer.midenBridge
-    });
     add({ key: `code:${agglayer.l1Bridge}`, kind: 'evm-code', label: 'L1 bridge', address: agglayer.l1Bridge });
     add({
       key: 'l1-network-id',
@@ -359,131 +426,7 @@ export async function evmRpc(chainId, method, params, fetchImpl) {
   throw new Error(`no RPC for chain ${chainId} answered ${method}: ${failures.join('; ')}`);
 }
 
-// `rpc.Api/GetAccount` with no accept header, which the node accepts for any client version. The
-// request fields are the same in node 0.16 and 0.17 (account_id = 1 { id = 1 }, details = 3).
-
-function varint(value) {
-  const out = [];
-  let n = value;
-  while (n > 0x7f) {
-    out.push((n & 0x7f) | 0x80);
-    n >>>= 7;
-  }
-  out.push(n);
-  return Buffer.from(out);
-}
-
-const lengthDelimited = (fieldNo, payload) =>
-  Buffer.concat([varint((fieldNo << 3) | 2), varint(payload.length), payload]);
-
-/** The GetAccount request body, framed for gRPC-web. With `mapSlot`, asks for that storage map whole. */
-export function getAccountFrame(accountIdHex, mapSlot) {
-  const id = Buffer.from(accountIdHex.slice(2), 'hex');
-  let details = Buffer.alloc(0);
-  if (mapSlot !== undefined) {
-    const mapRequest = Buffer.concat([lengthDelimited(1, Buffer.from(mapSlot, 'utf8')), Buffer.from([0x10, 0x01])]);
-    details = lengthDelimited(4, lengthDelimited(1, mapRequest));
-  }
-  const message = Buffer.concat([lengthDelimited(1, lengthDelimited(1, id)), lengthDelimited(3, details)]);
-  const header = Buffer.alloc(5);
-  header.writeUInt32BE(message.length, 1);
-  return Buffer.concat([header, message]);
-}
-
-function* protoFields(buffer) {
-  let offset = 0;
-  const readVarint = () => {
-    let value = 0n;
-    let shift = 0n;
-    let byte;
-    do {
-      byte = buffer[offset++];
-      if (byte === undefined) throw new Error('truncated protobuf');
-      value |= BigInt(byte & 0x7f) << shift;
-      shift += 7n;
-    } while (byte & 0x80);
-    return value;
-  };
-  while (offset < buffer.length) {
-    const key = Number(readVarint());
-    const fieldNo = key >>> 3;
-    const wireType = key & 7;
-    if (wireType === 0) yield [fieldNo, readVarint()];
-    else if (wireType === 1) {
-      yield [fieldNo, buffer.readBigUInt64LE(offset)];
-      offset += 8;
-    } else if (wireType === 5) {
-      yield [fieldNo, buffer.readUInt32LE(offset)];
-      offset += 4;
-    } else if (wireType === 2) {
-      const length = Number(readVarint());
-      yield [fieldNo, buffer.subarray(offset, offset + length)];
-      offset += length;
-    } else throw new Error(`unsupported protobuf wire type ${wireType}`);
-  }
-}
-
-const fieldsNamed = (buffer, fieldNo) => [...protoFields(buffer)].filter(([no]) => no === fieldNo).map(([, v]) => v);
-
-/** Splits a gRPC-web body into its message and the grpc-status it ends with. */
-export function readGrpcWeb(headers, body) {
-  let message = null;
-  let status = headers.get('grpc-status');
-  let statusMessage = headers.get('grpc-message');
-  let offset = 0;
-  while (offset + 5 <= body.length) {
-    const flag = body[offset];
-    const length = body.readUInt32BE(offset + 1);
-    const frame = body.subarray(offset + 5, offset + 5 + length);
-    if (flag & 0x80) {
-      for (const line of frame.toString('utf8').split('\r\n')) {
-        const [name, ...rest] = line.split(':');
-        if (name === 'grpc-status') status = rest.join(':').trim();
-        if (name === 'grpc-message') statusMessage = rest.join(':').trim();
-      }
-    } else message = frame;
-    offset += 5 + length;
-  }
-  return { message, status, statusMessage: statusMessage === null ? '' : decodeURIComponent(statusMessage) };
-}
-
-/** Counts registry entries whose value word starts with 1 (registered), from a GetAccount reply. */
-export function countRegisteredFaucets(message, slot = REGISTRY_SLOT) {
-  let registered = 0;
-  for (const details of fieldsNamed(message, 3)) {
-    for (const storage of fieldsNamed(details, 2)) {
-      for (const map of fieldsNamed(storage, 2)) {
-        if (fieldsNamed(map, 1)[0]?.toString('utf8') !== slot) continue;
-        if (fieldsNamed(map, 2).some(tooMany => tooMany === 1n))
-          throw new Error(`${slot} has too many entries to read whole`);
-        for (const all of fieldsNamed(map, 3)) {
-          for (const entry of fieldsNamed(all, 1)) {
-            const value = fieldsNamed(entry, 2)[0];
-            const first = value === undefined ? undefined : fieldsNamed(value, 1)[0];
-            if (first === 1n) registered++;
-          }
-        }
-      }
-    }
-  }
-  return registered;
-}
-
-export async function midenGetAccount(rpcUrl, accountIdHex, mapSlot, fetchImpl) {
-  const res = await fetchWithTimeout(fetchImpl, `${rpcUrl}/rpc.Api/GetAccount`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/grpc-web+proto', 'x-grpc-web': '1' },
-    body: getAccountFrame(accountIdHex, mapSlot)
-  });
-  if (res.status !== 200) return { state: 'error', detail: `HTTP ${res.status}` };
-  const { message, status, statusMessage } = readGrpcWeb(res.headers, Buffer.from(await res.arrayBuffer()));
-  if (status === '0' && message !== null) return { state: 'ok', message };
-  if (status === '5' || /not found/i.test(statusMessage)) return { state: 'absent', detail: statusMessage };
-  return { state: 'error', detail: `grpc-status ${status ?? 'missing'}: ${statusMessage}` };
-}
-
 async function runCheck(check, config, fetchImpl) {
-  const midenRpc = MIDEN_RPC[config.network];
   switch (check.kind) {
     case 'http':
       return httpHealth(check, fetchImpl);
@@ -509,25 +452,6 @@ async function runCheck(check, config, fetchImpl) {
       return /^0x[0-9a-fA-F]{64}$/.test(result)
         ? { ok: true, detail: `answers ${BigInt(result)}` }
         : { ok: false, detail: `answered ${result.slice(0, 80)}, not a uint` };
-    }
-    case 'miden-account':
-    case 'miden-registry': {
-      if (midenRpc === undefined)
-        return { ok: false, detail: `no Miden RPC known for "${config.network}"; add it to MIDEN_RPC` };
-      const reply = await midenGetAccount(
-        midenRpc,
-        check.id,
-        check.kind === 'miden-registry' ? REGISTRY_SLOT : undefined,
-        fetchImpl
-      );
-      if (reply.state === 'absent')
-        return { ok: false, detail: `${check.id} does not exist on ${config.network} (${reply.detail})` };
-      if (reply.state === 'error') return { ok: false, detail: `${check.id}: ${reply.detail}` };
-      if (check.kind === 'miden-account') return { ok: true, detail: `${check.id} exists` };
-      const registered = countRegisteredFaucets(reply.message);
-      return registered > 0
-        ? { ok: true, detail: `${check.id} registers ${registered} faucet(s)` }
-        : { ok: false, detail: `${check.id} registers no faucet` };
     }
     default:
       return { ok: false, detail: `unknown check kind ${check.kind}` };
@@ -577,7 +501,7 @@ export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fet
   errors.push(...parsed.errors);
   notes.push(...parsed.dropped.map(reason => `dropped: ${reason}`));
   if (parsed.config === null) return { errors, notes };
-  errors.push(...switchErrors(parsed.config));
+  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config));
   const bump = versionError(text, parsed.config.version, baseText(baseRef, file, root));
   if (bump !== null) errors.push(bump);
   if (smoke && errors.length === 0) {

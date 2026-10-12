@@ -1,6 +1,6 @@
 # wallet-config
 
-Per-network Epoch and Agglayer settings the Miden wallet reads at runtime from
+Per-network Epoch, Agglayer and swap settings the Miden wallet reads at runtime from
 `https://raw.githubusercontent.com/0xMiden/wallet-config/main/<network>.json`. Whatever is on
 `main` is what every wallet on that network uses within about an hour; there is no signature.
 
@@ -23,13 +23,22 @@ Per-network Epoch and Agglayer settings the Miden wallet reads at runtime from
 | `features.fastBridge` | Switch for new Fast (Epoch) bridges, in and out. |
 | `features.bridgeIn` | Switch for new Slow (Agglayer) bridges from EVM to Miden. |
 | `features.bridgeOut` | Switch for new Slow (Agglayer) bridges from Miden to EVM. |
-| `mainnetCountdown.enabled` | Switch for the banner above every page of the open wallet that counts down to the mainnet launch and links to the early-access list. |
-| `mainnetCountdown.launchAt` | The moment the countdown reaches zero, as an RFC 3339 UTC timestamp (`2026-10-26T00:00:00Z`). Required while the switch is on. The wallet hides the banner once it has passed. |
+| `mainnetCountdown.enabled` | Switch for the banner in the open wallet that counts down to mainnet and links to the early-access list. |
+| `mainnetCountdown.launchAt` | The deadline as an RFC 3339 UTC timestamp (`2026-10-26T00:00:00Z`). Required while enabled; the banner hides when it passes. |
+| `swap.etaUrl` | The DEX quote service base URL (`https:`); the wallet appends `/v1/swap-eta`. Required when `swap.tokens` is set. |
+| `swap.tokens` | The tokens the swap screen offers, in picker order; the first two are the pair the form opens on. None, or at least two. |
+| `swap.tokens[].symbol` | The symbol the wallet shows: 1 to 6 upper-case letters, unique in the list. |
+| `swap.tokens[].faucetId` | The token's faucet (15-byte `0x` account id), unique in the list. |
+| `swap.tokens[].decimals` | The faucet's on-chain decimals (integer, 0 to 12). The wallet converts typed amounts with it, so a wrong value changes what is swapped. |
+| `swap.tokens[].logo` | Optional. The bundled mark to draw: `MIDEN`, `ETH`, `USDC` or `BTC`. Another value is ignored and the default mark is drawn. |
+| `swap.tokens[].priceSymbol` | Optional. The asset the wallet's price feed values the token at: `ETH`, `BTC` or `USDC`. Absent means unpriced. Another value is ignored. |
 
-Everything else (rollup id, bridgeable tokens, decimals, symbols, the Earn market, service health)
-the wallet reads from chain and from the services themselves. `agglayer`, `epoch` and
-`mainnetCountdown` are optional, and so is every field inside them; a missing switch is off. Unknown
-fields are ignored, so a field can be added before older wallets understand it.
+Everything else (rollup id, bridgeable tokens, the bridge tokens' decimals and symbols, the Earn
+market, service health) the wallet reads from chain and from the services themselves. `agglayer`,
+`epoch`, `swap` and `mainnetCountdown` may be omitted. Each listed swap token requires `symbol`,
+`faucetId` and `decimals`. A missing switch is off, and a
+missing `swap.tokens` shows Swap as unavailable on that network. Unknown fields are ignored, so a
+field can be added before older wallets understand it.
 
 ## What a switch does
 
@@ -38,15 +47,16 @@ bridges in that direction. It never blocks Withdraw (Earn), Claim (Agglayer, on 
 (Epoch): those recover funds, and the wallet never greys them out.
 A switch also never changes a transfer already in flight: each one keeps the ids it started with.
 
-`mainnetCountdown.enabled` is a plain display switch: on, every open wallet on the network shows the
-countdown banner until `launchAt`; off, none does. It greys nothing out.
+`mainnetCountdown.enabled` controls only the banner. It does not change transfer controls.
 
 ## Publishing
 
 1. Edit the values and bump `version`. Going back to older values is a new, higher version too.
 2. Open a pull request. `validate` checks the document against the wallet's own rules, the version
-   bump against `main`, and, for every switch that is on, that the accounts and contracts exist on
-   their chains and the services answer their health routes.
+   bump against `main`, and, for every switch that is on, that the contracts exist on the EVM chain
+   and the services answer their health routes. It does not read Miden or the quote service: check a
+   swap token's faucet and decimals against the chain, and the quote service's answer, yourself
+   before you merge.
 3. Merge (squash). Wallets pick it up within about an hour plus the raw CDN cache (about 5 minutes);
    a wallet showing a greyed-out control re-checks every minute.
 

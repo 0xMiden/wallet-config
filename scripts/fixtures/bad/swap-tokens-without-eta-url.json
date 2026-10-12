@@ -1,0 +1,1 @@
+{"_expect": "swap.tokens is set but swap.etaUrl is missing", "network": "testnet", "version": 1, "swap": {"tokens": [{"symbol": "IETH", "faucetId": "0xe33498f1176661512b5ac4ded86ec7", "decimals": 8}, {"symbol": "IBTC", "faucetId": "0xaf8444c4a7c091114666adba25c5d0", "decimals": 8}]}}
