@@ -178,7 +178,10 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   }
 
   const swapIn = readSection(body, 'swap', errors);
-  const swap = { tokens: readSwapTokens(swapIn.tokens, errors, dropped) };
+  const swap = {
+    tokens: readSwapTokens(swapIn.tokens, errors, dropped),
+    etaUrl: readUrl(swapIn, 'swap', 'etaUrl', allowLocalHttp, errors)
+  };
 
   if (errors.length > 0) return { config: null, errors, dropped };
   return { config: { network, version, evm, agglayer, epoch, features, swap }, errors, dropped };
@@ -239,13 +242,20 @@ function readSwapTokens(value, errors, dropped) {
   return tokens;
 }
 
-/** A repo rule, not a parse rule: one swap token gives the wallet nothing to open the form on. */
+/**
+ * Repo rules, not parse rules: one swap token gives the wallet nothing to open the form on, and a
+ * list without the quote service leaves every pair unquoted.
+ */
 export function swapErrors(config) {
+  const errors = [];
   const count = config.swap.tokens.length;
   if (count > 0 && count < MIN_SWAP_TOKENS) {
-    return [`swap.tokens must name at least ${MIN_SWAP_TOKENS} tokens, or none`];
+    errors.push(`swap.tokens must name at least ${MIN_SWAP_TOKENS} tokens, or none`);
   }
-  return [];
+  if (count > 0 && config.swap.etaUrl === undefined) {
+    errors.push('swap.tokens is set but swap.etaUrl is missing');
+  }
+  return errors;
 }
 
 export function parseBridgeConfig(body, network, options) {

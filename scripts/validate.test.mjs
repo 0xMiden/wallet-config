@@ -110,7 +110,11 @@ describe('parseBridgeConfig', () => {
       priceSymbol: 'ETH'
     });
     assert.deepEqual(config.swap.tokens[0].priceSymbol, undefined);
-    assert.deepEqual(parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet').swap, { tokens: [] });
+    assert.equal(config.swap.etaUrl, 'https://35-175-40-181.sslip.io');
+    assert.deepEqual(parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet').swap, {
+      tokens: [],
+      etaUrl: undefined
+    });
   });
 });
 

@@ -23,6 +23,7 @@ Per-network Epoch, Agglayer and swap settings the Miden wallet reads at runtime 
 | `features.fastBridge` | Switch for new Fast (Epoch) bridges, in and out. |
 | `features.bridgeIn` | Switch for new Slow (Agglayer) bridges from EVM to Miden. |
 | `features.bridgeOut` | Switch for new Slow (Agglayer) bridges from Miden to EVM. |
+| `swap.etaUrl` | The DEX quote service base URL (`https:`); the wallet appends `/v1/swap-eta`. Required when `swap.tokens` is set. |
 | `swap.tokens` | The tokens the swap screen offers, in picker order; the first two are the pair the form opens on. None, or at least two. |
 | `swap.tokens[].symbol` | The symbol the wallet shows: 1 to 6 upper-case letters, unique in the list. |
 | `swap.tokens[].faucetId` | The token's faucet (15-byte `0x` account id), unique in the list. |
@@ -48,8 +49,9 @@ A switch also never changes a transfer already in flight: each one keeps the ids
 1. Edit the values and bump `version`. Going back to older values is a new, higher version too.
 2. Open a pull request. `validate` checks the document against the wallet's own rules, the version
    bump against `main`, and, for every switch that is on, that the contracts exist on the EVM chain
-   and the services answer their health routes. It does not read Miden: check a swap token's faucet
-   and decimals against the chain yourself before you merge.
+   and the services answer their health routes. It does not read Miden or the quote service: check a
+   swap token's faucet and decimals against the chain, and the quote service's answer, yourself
+   before you merge.
 3. Merge (squash). Wallets pick it up within about an hour plus the raw CDN cache (about 5 minutes);
    a wallet showing a greyed-out control re-checks every minute.
 

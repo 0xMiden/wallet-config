@@ -16,6 +16,7 @@
   },
   "features": { "earn": true, "fastBridge": true, "bridgeIn": true, "bridgeOut": true },
   "swap": {
+    "etaUrl": "https://35-175-40-181.sslip.io/",
     "tokens": [
       { "symbol": "IMIDEN", "faucetId": "0x750052a4af10cd51141f52c0ec2ada", "decimals": 8, "logo": "MIDEN" },
       { "symbol": "IETH", "faucetId": "0xE33498F1176661512B5AC4DED86EC7", "decimals": 8, "logo": "ETH", "priceSymbol": "ETH" },
