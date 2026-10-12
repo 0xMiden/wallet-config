@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,7 @@ import {
   smokeTest,
   swapErrors,
   switchErrors,
+  validateFile,
   versionError
 } from './validate.mjs';
 
@@ -37,6 +39,21 @@ describe('fixtures', () => {
       const { config, errors } = parseBridgeConfigDetailed(body, 'testnet');
       const reasons = config === null ? errors : [...switchErrors(config), ...swapErrors(config)];
       assert.ok(reasons.includes(body._expect), `expected "${body._expect}", got ${JSON.stringify(reasons)}`);
+    });
+  }
+});
+
+describe('validateFile', () => {
+  for (const name of ['swap-tokens-one.json', 'swap-tokens-without-eta-url.json']) {
+    it(`enforces swap policy in bad/${name}`, async () => {
+      const root = mkdtempSync(path.join(tmpdir(), 'wallet-config-validate-'));
+      try {
+        copyFileSync(path.join(FIXTURES, 'bad', name), path.join(root, 'testnet.json'));
+        const { errors } = await validateFile('testnet.json', { root, smoke: false });
+        assert.deepEqual(errors, [readFixture('bad', name)._expect]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     });
   }
 });
