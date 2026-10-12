@@ -9,9 +9,9 @@
  *
  * Three layers, in order: the wallet's own parse rules (ported from the wallet's
  * src/lib/remote-config/schema.ts; the two must agree on every rule), the repo rules (file name,
- * version bump, a switched-on feature has every value it needs), and a deploy smoke test that, for
- * every switched-on feature, finds its EVM contracts on chain and gets an answer from its services'
- * health routes. No dependencies: Node 22 only.
+ * version bump, valid countdown publication, switched-on features have every value they need),
+ * and a deploy smoke test that finds EVM contracts and service health routes for enabled features.
+ * No dependencies: Node 22 only.
  */
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -48,6 +48,22 @@ export const EVM_RPCS = {
 const REQUEST_TIMEOUT_MS = 15_000;
 
 const isRecord = value => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function utcTimestamp(value) {
+  if (typeof value !== 'string' || !UTC_TIMESTAMP.test(value)) return undefined;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return undefined;
+  return new Date(parsed).toISOString().slice(0, 19) === value.slice(0, 19) ? parsed : undefined;
+}
+
+function readCountdown(value) {
+  if (!isRecord(value)) return { enabled: false };
+  const { enabled, launchAt } = value;
+  if (enabled !== undefined && typeof enabled !== 'boolean') return { enabled: false };
+  const moment = launchAt === undefined ? undefined : utcTimestamp(launchAt);
+  if (launchAt !== undefined && moment === undefined) return { enabled: false };
+  return { enabled: enabled === true, ...(moment === undefined ? {} : { launchAt: moment }) };
+}
 
 function readSection(body, name, errors) {
   const value = body[name];
@@ -184,21 +200,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     etaUrl: readUrl(swapIn, 'swap', 'etaUrl', allowLocalHttp, errors)
   };
 
-  const countdownIn = readSection(body, 'mainnetCountdown', errors);
-  const mainnetCountdown = { enabled: false, launchAt: undefined };
-  if (countdownIn.enabled !== undefined) {
-    if (typeof countdownIn.enabled === 'boolean') mainnetCountdown.enabled = countdownIn.enabled;
-    else errors.push('mainnetCountdown.enabled must be true or false');
-  }
-  if (countdownIn.launchAt !== undefined) {
-    const launchAt = countdownIn.launchAt;
-    const parsed = typeof launchAt === 'string' && UTC_TIMESTAMP.test(launchAt) ? Date.parse(launchAt) : NaN;
-    if (Number.isNaN(parsed) || new Date(parsed).toISOString().slice(0, 19) !== launchAt.slice(0, 19)) {
-      errors.push('mainnetCountdown.launchAt must be an RFC 3339 UTC timestamp such as 2026-10-26T00:00:00Z');
-    } else {
-      mainnetCountdown.launchAt = launchAt;
-    }
-  }
+  const mainnetCountdown = readCountdown(body.mainnetCountdown);
 
   if (errors.length > 0) return { config: null, errors, dropped };
   return { config: { network, version, evm, agglayer, epoch, features, swap, mainnetCountdown }, errors, dropped };
@@ -310,7 +312,22 @@ export function switchErrors(config) {
       }
     }
   }
-  if (config.mainnetCountdown.enabled && config.mainnetCountdown.launchAt === undefined) {
+  return errors;
+}
+
+/** The wallet safely ignores a bad banner; publishing one is still a configuration mistake. */
+export function countdownErrors(body) {
+  const countdown = body.mainnetCountdown;
+  if (countdown === undefined) return [];
+  if (!isRecord(countdown)) return ['mainnetCountdown must be an object'];
+  const errors = [];
+  if (countdown.enabled !== undefined && typeof countdown.enabled !== 'boolean') {
+    errors.push('mainnetCountdown.enabled must be true or false');
+  }
+  if (countdown.launchAt !== undefined && utcTimestamp(countdown.launchAt) === undefined) {
+    errors.push('mainnetCountdown.launchAt must be an RFC 3339 UTC timestamp such as 2026-10-26T00:00:00Z');
+  }
+  if (countdown.enabled === true && countdown.launchAt === undefined) {
     errors.push('mainnetCountdown.enabled is on but mainnetCountdown.launchAt is missing');
   }
   return errors;
@@ -501,7 +518,7 @@ export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fet
   errors.push(...parsed.errors);
   notes.push(...parsed.dropped.map(reason => `dropped: ${reason}`));
   if (parsed.config === null) return { errors, notes };
-  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config));
+  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config), ...countdownErrors(body));
   const bump = versionError(text, parsed.config.version, baseText(baseRef, file, root));
   if (bump !== null) errors.push(bump);
   if (smoke && errors.length === 0) {
