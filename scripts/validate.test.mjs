@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  countdownErrors,
   evmRpc,
   parseBridgeConfig,
   parseBridgeConfigDetailed,
@@ -30,6 +31,7 @@ describe('fixtures', () => {
       assert.notEqual(config, null);
       assert.deepEqual(switchErrors(config), []);
       assert.deepEqual(swapErrors(config), []);
+      assert.deepEqual(countdownErrors(readFixture('good', name)), []);
     });
   }
 
@@ -37,15 +39,15 @@ describe('fixtures', () => {
     it(`refuses bad/${name} for its stated reason`, () => {
       const body = readFixture('bad', name);
       const { config, errors } = parseBridgeConfigDetailed(body, 'testnet');
-      const reasons = config === null ? errors : [...switchErrors(config), ...swapErrors(config)];
+      const reasons = config === null ? errors : [...switchErrors(config), ...swapErrors(config), ...countdownErrors(body)];
       assert.ok(reasons.includes(body._expect), `expected "${body._expect}", got ${JSON.stringify(reasons)}`);
     });
   }
 });
 
 describe('validateFile', () => {
-  for (const name of ['swap-tokens-one.json', 'swap-tokens-without-eta-url.json']) {
-    it(`enforces swap policy in bad/${name}`, async () => {
+  for (const name of ['swap-tokens-one.json', 'swap-tokens-without-eta-url.json', 'countdown-impossible-day.json', 'countdown-on-without-launch-at.json']) {
+    it(`enforces publication policy in bad/${name}`, async () => {
       const root = mkdtempSync(path.join(tmpdir(), 'wallet-config-validate-'));
       try {
         copyFileSync(path.join(FIXTURES, 'bad', name), path.join(root, 'testnet.json'));
@@ -132,6 +134,40 @@ describe('parseBridgeConfig', () => {
       tokens: [],
       etaUrl: undefined
     });
+  });
+
+  it('reads a missing mainnetCountdown section as off with no moment', () => {
+    const config = parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet');
+    assert.deepEqual(config.mainnetCountdown, { enabled: false });
+  });
+
+  it('keeps bridge config and turns off an invalid countdown, as the wallet does', () => {
+    const body = testnet();
+    body.mainnetCountdown = { enabled: true, launchAt: '2026-02-30T00:00:00Z' };
+    const { config, errors } = parseBridgeConfigDetailed(body, 'testnet');
+    assert.deepEqual(errors, []);
+    assert.notEqual(config, null);
+    assert.deepEqual(config.mainnetCountdown, { enabled: false });
+  });
+
+  it('reads the countdown switch and its moment', () => {
+    const config = parseBridgeConfig(readFixture('good', 'testnet-countdown.json'), 'testnet');
+    assert.deepEqual(config.mainnetCountdown, { enabled: true, launchAt: Date.parse('2026-10-26T00:00:00Z') });
+  });
+
+  it('turns off a countdown moment in any spelling but RFC 3339 UTC', () => {
+    for (const launchAt of ['2026-10-26', '2026-10-26T00:00:00+02:00', '2026-10-26 00:00:00Z', 1_792_000_000_000, '2026-13-40T00:00:00Z', '2026-02-30T00:00:00Z']) {
+      const body = { network: 'testnet', version: 1, mainnetCountdown: { enabled: true, launchAt } };
+      const { config, errors } = parseBridgeConfigDetailed(body, 'testnet');
+      assert.deepEqual(errors, []);
+      assert.deepEqual(config.mainnetCountdown, { enabled: false });
+      assert.ok(countdownErrors(body).some(e => e.startsWith('mainnetCountdown.launchAt must be')), `${launchAt}`);
+    }
+  });
+
+  it('accepts a countdown moment with fractional seconds', () => {
+    const body = { network: 'testnet', version: 1, mainnetCountdown: { enabled: true, launchAt: '2026-10-26T00:00:00.000Z' } };
+    assert.equal(parseBridgeConfig(body, 'testnet').mainnetCountdown.launchAt, Date.parse('2026-10-26T00:00:00.000Z'));
   });
 });
 

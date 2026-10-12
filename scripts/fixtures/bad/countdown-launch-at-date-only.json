@@ -1,0 +1,1 @@
+{"_expect": "mainnetCountdown.launchAt must be an RFC 3339 UTC timestamp such as 2026-10-26T00:00:00Z", "network": "testnet", "version": 1, "mainnetCountdown": {"enabled": true, "launchAt": "2026-10-26"}}

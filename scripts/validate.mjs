@@ -9,9 +9,9 @@
  *
  * Three layers, in order: the wallet's own parse rules (ported from the wallet's
  * src/lib/remote-config/schema.ts; the two must agree on every rule), the repo rules (file name,
- * version bump, a switched-on feature has every value it needs), and a deploy smoke test that, for
- * every switched-on feature, finds its EVM contracts on chain and gets an answer from its services'
- * health routes. No dependencies: Node 22 only.
+ * version bump, valid countdown publication, switched-on features have every value they need),
+ * and a deploy smoke test that finds EVM contracts and service health routes for enabled features.
+ * No dependencies: Node 22 only.
  */
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -32,6 +32,7 @@ export const MIN_SWAP_TOKENS = 2;
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
+const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 // A token symbol as the protocol's TokenSymbol allows it: 1 to 6 upper-case ASCII letters.
 const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
 
@@ -47,6 +48,22 @@ export const EVM_RPCS = {
 const REQUEST_TIMEOUT_MS = 15_000;
 
 const isRecord = value => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function utcTimestamp(value) {
+  if (typeof value !== 'string' || !UTC_TIMESTAMP.test(value)) return undefined;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return undefined;
+  return new Date(parsed).toISOString().slice(0, 19) === value.slice(0, 19) ? parsed : undefined;
+}
+
+function readCountdown(value) {
+  if (!isRecord(value)) return { enabled: false };
+  const { enabled, launchAt } = value;
+  if (enabled !== undefined && typeof enabled !== 'boolean') return { enabled: false };
+  const moment = launchAt === undefined ? undefined : utcTimestamp(launchAt);
+  if (launchAt !== undefined && moment === undefined) return { enabled: false };
+  return { enabled: enabled === true, ...(moment === undefined ? {} : { launchAt: moment }) };
+}
 
 function readSection(body, name, errors) {
   const value = body[name];
@@ -183,8 +200,10 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     etaUrl: readUrl(swapIn, 'swap', 'etaUrl', allowLocalHttp, errors)
   };
 
+  const mainnetCountdown = readCountdown(body.mainnetCountdown);
+
   if (errors.length > 0) return { config: null, errors, dropped };
-  return { config: { network, version, evm, agglayer, epoch, features, swap }, errors, dropped };
+  return { config: { network, version, evm, agglayer, epoch, features, swap, mainnetCountdown }, errors, dropped };
 }
 
 /**
@@ -292,6 +311,24 @@ export function switchErrors(config) {
         errors.push(`features.${name} is on but ${field} is missing or unsupported`);
       }
     }
+  }
+  return errors;
+}
+
+/** The wallet safely ignores a bad banner; publishing one is still a configuration mistake. */
+export function countdownErrors(body) {
+  const countdown = body.mainnetCountdown;
+  if (countdown === undefined) return [];
+  if (!isRecord(countdown)) return ['mainnetCountdown must be an object'];
+  const errors = [];
+  if (countdown.enabled !== undefined && typeof countdown.enabled !== 'boolean') {
+    errors.push('mainnetCountdown.enabled must be true or false');
+  }
+  if (countdown.launchAt !== undefined && utcTimestamp(countdown.launchAt) === undefined) {
+    errors.push('mainnetCountdown.launchAt must be an RFC 3339 UTC timestamp such as 2026-10-26T00:00:00Z');
+  }
+  if (countdown.enabled === true && countdown.launchAt === undefined) {
+    errors.push('mainnetCountdown.enabled is on but mainnetCountdown.launchAt is missing');
   }
   return errors;
 }
@@ -481,7 +518,7 @@ export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fet
   errors.push(...parsed.errors);
   notes.push(...parsed.dropped.map(reason => `dropped: ${reason}`));
   if (parsed.config === null) return { errors, notes };
-  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config));
+  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config), ...countdownErrors(body));
   const bump = versionError(text, parsed.config.version, baseText(baseRef, file, root));
   if (bump !== null) errors.push(bump);
   if (smoke && errors.length === 0) {

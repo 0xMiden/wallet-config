@@ -23,6 +23,8 @@ Per-network Epoch, Agglayer and swap settings the Miden wallet reads at runtime 
 | `features.fastBridge` | Switch for new Fast (Epoch) bridges, in and out. |
 | `features.bridgeIn` | Switch for new Slow (Agglayer) bridges from EVM to Miden. |
 | `features.bridgeOut` | Switch for new Slow (Agglayer) bridges from Miden to EVM. |
+| `mainnetCountdown.enabled` | Switch for the banner in the open wallet that counts down to mainnet and links to the early-access list. |
+| `mainnetCountdown.launchAt` | The deadline as an RFC 3339 UTC timestamp (`2026-10-26T00:00:00Z`). Required while enabled; the banner hides when it passes. |
 | `swap.etaUrl` | The DEX quote service base URL (`https:`); the wallet appends `/v1/swap-eta`. Required when `swap.tokens` is set. |
 | `swap.tokens` | The tokens the swap screen offers, in picker order; the first two are the pair the form opens on. None, or at least two. |
 | `swap.tokens[].symbol` | The symbol the wallet shows: 1 to 6 upper-case letters, unique in the list. |
@@ -33,7 +35,8 @@ Per-network Epoch, Agglayer and swap settings the Miden wallet reads at runtime 
 
 Everything else (rollup id, bridgeable tokens, the bridge tokens' decimals and symbols, the Earn
 market, service health) the wallet reads from chain and from the services themselves. `agglayer`,
-`epoch` and `swap` may be omitted. Each listed swap token requires `symbol`, `faucetId` and `decimals`. A missing switch is off, and a
+`epoch`, `swap` and `mainnetCountdown` may be omitted. Each listed swap token requires `symbol`,
+`faucetId` and `decimals`. A missing switch is off, and a
 missing `swap.tokens` shows Swap as unavailable on that network. Unknown fields are ignored, so a
 field can be added before older wallets understand it.
 
@@ -43,6 +46,8 @@ A switch that is `false` greys out the entry point for **new** Earn deposits, Fa
 bridges in that direction. It never blocks Withdraw (Earn), Claim (Agglayer, on L1) or Reclaim
 (Epoch): those recover funds, and the wallet never greys them out.
 A switch also never changes a transfer already in flight: each one keeps the ids it started with.
+
+`mainnetCountdown.enabled` controls only the banner. It does not change transfer controls.
 
 ## Publishing
 

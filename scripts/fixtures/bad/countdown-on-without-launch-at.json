@@ -1,0 +1,1 @@
+{"_expect": "mainnetCountdown.enabled is on but mainnetCountdown.launchAt is missing", "network": "testnet", "version": 1, "mainnetCountdown": {"enabled": true}}
