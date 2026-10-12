@@ -1,6 +1,6 @@
 # wallet-config
 
-Per-network Epoch and Agglayer settings the Miden wallet reads at runtime from
+Per-network Epoch, Agglayer and swap settings the Miden wallet reads at runtime from
 `https://raw.githubusercontent.com/0xMiden/wallet-config/main/<network>.json`. Whatever is on
 `main` is what every wallet on that network uses within about an hour; there is no signature.
 
@@ -23,11 +23,18 @@ Per-network Epoch and Agglayer settings the Miden wallet reads at runtime from
 | `features.fastBridge` | Switch for new Fast (Epoch) bridges, in and out. |
 | `features.bridgeIn` | Switch for new Slow (Agglayer) bridges from EVM to Miden. |
 | `features.bridgeOut` | Switch for new Slow (Agglayer) bridges from Miden to EVM. |
+| `swap.tokens` | The tokens the swap screen offers, in picker order; the first two are the pair the form opens on. None, or at least two. |
+| `swap.tokens[].symbol` | The symbol the wallet shows: 1 to 6 upper-case letters, unique in the list. |
+| `swap.tokens[].faucetId` | The token's faucet (15-byte `0x` account id), unique in the list. |
+| `swap.tokens[].decimals` | The faucet's on-chain decimals (integer, 0 to 12). The wallet converts typed amounts with it, so a wrong value changes what is swapped. |
+| `swap.tokens[].logo` | Optional. The bundled mark to draw: `MIDEN`, `ETH`, `USDC` or `BTC`. Another value is ignored and the default mark is drawn. |
+| `swap.tokens[].priceSymbol` | Optional. The asset the wallet's price feed values the token at: `ETH`, `BTC` or `USDC`. Absent means unpriced. Another value is ignored. |
 
-Everything else (rollup id, bridgeable tokens, decimals, symbols, the Earn market, service health)
-the wallet reads from chain and from the services themselves. `agglayer` and `epoch` are optional,
-and so is every field inside them; a missing switch is off. Unknown fields are ignored, so a field
-can be added before older wallets understand it.
+Everything else (rollup id, bridgeable tokens, the bridge tokens' decimals and symbols, the Earn
+market, service health) the wallet reads from chain and from the services themselves. `agglayer`,
+`epoch` and `swap` are optional, and so is every field inside them; a missing switch is off, and a
+missing `swap.tokens` shows Swap as unavailable on that network. Unknown fields are ignored, so a
+field can be added before older wallets understand it.
 
 ## What a switch does
 
@@ -41,7 +48,8 @@ A switch also never changes a transfer already in flight: each one keeps the ids
 1. Edit the values and bump `version`. Going back to older values is a new, higher version too.
 2. Open a pull request. `validate` checks the document against the wallet's own rules, the version
    bump against `main`, and, for every switch that is on, that the contracts exist on the EVM chain
-   and the services answer their health routes.
+   and the services answer their health routes. It does not read Miden: check a swap token's faucet
+   and decimals against the chain yourself before you merge.
 3. Merge (squash). Wallets pick it up within about an hour plus the raw CDN cache (about 5 minutes);
    a wallet showing a greyed-out control re-checks every minute.
 

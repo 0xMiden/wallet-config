@@ -10,6 +10,7 @@ import {
   parseBridgeConfigDetailed,
   plannedChecks,
   smokeTest,
+  swapErrors,
   switchErrors,
   versionError
 } from './validate.mjs';
@@ -26,6 +27,7 @@ describe('fixtures', () => {
       assert.deepEqual(errors, []);
       assert.notEqual(config, null);
       assert.deepEqual(switchErrors(config), []);
+      assert.deepEqual(swapErrors(config), []);
     });
   }
 
@@ -33,7 +35,7 @@ describe('fixtures', () => {
     it(`refuses bad/${name} for its stated reason`, () => {
       const body = readFixture('bad', name);
       const { config, errors } = parseBridgeConfigDetailed(body, 'testnet');
-      const reasons = config === null ? errors : switchErrors(config);
+      const reasons = config === null ? errors : [...switchErrors(config), ...swapErrors(config)];
       assert.ok(reasons.includes(body._expect), `expected "${body._expect}", got ${JSON.stringify(reasons)}`);
     });
   }
@@ -77,20 +79,38 @@ describe('parseBridgeConfig', () => {
     assert.equal(parseBridgeConfig(body, 'localnet', { allowLocalHttp: true }), null);
   });
 
-  it('drops an unsupported chain or protocol instead of refusing the document', () => {
+  it('drops an unsupported chain, protocol, logo or price symbol instead of refusing the document', () => {
     const { config, dropped } = parseBridgeConfigDetailed(
       readFixture('good', 'testnet-unsupported-values.json'),
       'testnet'
     );
     assert.equal(config.evm.chainId, undefined);
     assert.equal(config.epoch.earnProtocol, undefined);
-    assert.equal(dropped.length, 2);
+    assert.deepEqual(config.swap.tokens[0], { symbol: 'ISOL', faucetId: '0x750052a4af10cd51141f52c0ec2ada', decimals: 8 });
+    assert.equal(dropped.length, 4);
   });
 
   it('reads a missing switch, or a missing features section, as off', () => {
     const config = parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet');
     assert.deepEqual(config.features, { earn: false, fastBridge: false, bridgeIn: false, bridgeOut: false });
     assert.deepEqual(config.agglayer, { l1Bridge: undefined, midenBridge: undefined, indexerUrl: undefined });
+  });
+
+  it('reads the swap tokens in order, lowercasing faucet ids, and a missing swap section as no tokens', () => {
+    const config = parseBridgeConfig(testnet(), 'testnet');
+    assert.deepEqual(
+      config.swap.tokens.map(token => token.symbol),
+      ['IMIDEN', 'IETH', 'IUSDT', 'IBTC']
+    );
+    assert.deepEqual(config.swap.tokens[1], {
+      symbol: 'IETH',
+      faucetId: '0xe33498f1176661512b5ac4ded86ec7',
+      decimals: 8,
+      logo: 'ETH',
+      priceSymbol: 'ETH'
+    });
+    assert.deepEqual(config.swap.tokens[0].priceSymbol, undefined);
+    assert.deepEqual(parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet').swap, { tokens: [] });
   });
 });
 

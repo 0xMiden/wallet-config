@@ -1,0 +1,1 @@
+{"_expect": "swap.tokens[0].faucetId must be a 15-byte 0x account id", "network": "testnet", "version": 1, "swap": {"tokens": [{"symbol": "IETH", "faucetId": "mtst1arcf9xpxfrc7wygpv744ytgr6cw2df6h", "decimals": 8}, {"symbol": "IBTC", "faucetId": "0xaf8444c4a7c091114666adba25c5d0", "decimals": 8}]}}
