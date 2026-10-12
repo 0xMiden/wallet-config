@@ -1,0 +1,71 @@
+name: Swap validator regression proof
+
+on:
+  push:
+    branches: [verify/config-swap-dispatch-20261012]
+
+permissions:
+  contents: read
+
+jobs:
+  regression-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCT_SHA: e8217e46dd98c92b805fe4d8394df5b186d8d4fa
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PRODUCT_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Confirm pinned source and passing control
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$PRODUCT_SHA"
+          node --test --test-reporter=tap scripts/validate.test.mjs | tee baseline.log
+      - name: Remove production swap enforcement and require both regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply <<'PATCH'
+          diff --git a/scripts/validate.mjs b/scripts/validate.mjs
+          --- a/scripts/validate.mjs
+          +++ b/scripts/validate.mjs
+          @@ -481,7 +481,7 @@ export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fet
+             errors.push(...parsed.errors);
+             notes.push(...parsed.dropped.map(reason => `dropped: ${reason}`));
+             if (parsed.config === null) return { errors, notes };
+          -  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config));
+          +  errors.push(...switchErrors(parsed.config));
+             const bump = versionError(text, parsed.config.version, baseText(baseRef, file, root));
+             if (bump !== null) errors.push(bump);
+             if (smoke && errors.length === 0) {
+          PATCH
+          set +e
+          node --test --test-reporter=tap scripts/validate.test.mjs > mutation.log 2>&1
+          mutation_status=$?
+          set -e
+          cat mutation.log
+          test "$mutation_status" -eq 1
+          grep -E 'not ok [0-9]+ - enforces swap policy in bad/swap-tokens-one.json' mutation.log
+          grep -E 'not ok [0-9]+ - enforces swap policy in bad/swap-tokens-without-eta-url.json' mutation.log
+          grep -Fx '# fail 2' mutation.log
+      - name: Restore production enforcement and require the full suite
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git restore --source="$PRODUCT_SHA" -- scripts/validate.mjs
+          git diff --exit-code "$PRODUCT_SHA" -- scripts/validate.mjs
+          node --test --test-reporter=tap scripts/validate.test.mjs | tee restored.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swap-validator-regression-proof
+          path: |
+            baseline.log
+            mutation.log
+            restored.log
