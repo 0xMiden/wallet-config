@@ -33,7 +33,7 @@ Per-network Epoch, Agglayer and swap settings the Miden wallet reads at runtime 
 
 Everything else (rollup id, bridgeable tokens, the bridge tokens' decimals and symbols, the Earn
 market, service health) the wallet reads from chain and from the services themselves. `agglayer`,
-`epoch` and `swap` are optional, and so is every field inside them; a missing switch is off, and a
+`epoch` and `swap` are optional, as are their direct fields; each listed swap token requires `symbol`, `faucetId` and `decimals`. A missing switch is off, and a
 missing `swap.tokens` shows Swap as unavailable on that network. Unknown fields are ignored, so a
 field can be added before older wallets understand it.
 
