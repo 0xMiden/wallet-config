@@ -21,9 +21,19 @@ import { fileURLToPath } from 'node:url';
 export const BRIDGE_SWITCHES = ['earn', 'fastBridge', 'bridgeIn', 'bridgeOut'];
 export const SUPPORTED_EVM_CHAIN_IDS = [11155111];
 export const SUPPORTED_EARN_PROTOCOLS = ['dummy-lending'];
+/** The marks the wallet ships for a swap token's logo (components/TokenLogo). */
+export const SUPPORTED_SWAP_TOKEN_LOGOS = ['MIDEN', 'ETH', 'USDC', 'BTC'];
+/** The assets the wallet's price feed quotes (lib/prices/constant.ts KNOWN_SYMBOLS). */
+export const SUPPORTED_PRICE_SYMBOLS = ['ETH', 'BTC', 'USDC'];
+/** A fungible faucet's decimals: the protocol allows up to 12 (miden-objects BasicFungibleFaucet::MAX_DECIMALS). */
+export const MAX_SWAP_TOKEN_DECIMALS = 12;
+/** The swap form opens on the first two tokens, so a list needs at least two. */
+export const MIN_SWAP_TOKENS = 2;
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
+// A token symbol as the protocol's TokenSymbol allows it: 1 to 6 upper-case ASCII letters.
+const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
 
 /** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
 export const EVM_RPCS = {
@@ -167,8 +177,85 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     else errors.push(`features.${name} must be true or false`);
   }
 
+  const swapIn = readSection(body, 'swap', errors);
+  const swap = {
+    tokens: readSwapTokens(swapIn.tokens, errors, dropped),
+    etaUrl: readUrl(swapIn, 'swap', 'etaUrl', allowLocalHttp, errors)
+  };
+
   if (errors.length > 0) return { config: null, errors, dropped };
-  return { config: { network, version, evm, agglayer, epoch, features }, errors, dropped };
+  return { config: { network, version, evm, agglayer, epoch, features, swap }, errors, dropped };
+}
+
+/**
+ * The wallet's swap registry (schema.ts readSwapTokens): the list the swap token picker shows, in
+ * order. A bad entry rejects the document; a logo or price symbol the wallet lacks is dropped from
+ * its entry only. Absent means no swap tokens, so the wallet shows Swap as unavailable.
+ */
+function readSwapTokens(value, errors, dropped) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    errors.push('swap.tokens must be an array');
+    return [];
+  }
+  const tokens = [];
+  value.forEach((entry, index) => {
+    const label = `swap.tokens[${index}]`;
+    if (!isRecord(entry)) {
+      errors.push(`${label} must be an object`);
+      return;
+    }
+    const { symbol, decimals } = entry;
+    if (typeof symbol !== 'string' || !TOKEN_SYMBOL.test(symbol)) {
+      errors.push(`${label}.symbol must be 1 to 6 upper-case letters`);
+    }
+    const faucetId = readPattern(entry, label, 'faucetId', MIDEN_ACCOUNT_ID, 'a 15-byte 0x account id', errors);
+    if (faucetId === undefined && entry.faucetId === undefined) errors.push(`${label}.faucetId is required`);
+    if (!Number.isSafeInteger(decimals) || decimals < 0 || decimals > MAX_SWAP_TOKEN_DECIMALS) {
+      errors.push(`${label}.decimals must be an integer from 0 to ${MAX_SWAP_TOKEN_DECIMALS}`);
+    }
+    const token = { symbol, faucetId, decimals };
+    if (entry.logo !== undefined) {
+      if (typeof entry.logo !== 'string') errors.push(`${label}.logo must be a string`);
+      else if (SUPPORTED_SWAP_TOKEN_LOGOS.includes(entry.logo)) token.logo = entry.logo;
+      else dropped.push(`${label}.logo "${entry.logo}" is not a mark the wallet ships`);
+    }
+    if (entry.priceSymbol !== undefined) {
+      if (typeof entry.priceSymbol !== 'string') errors.push(`${label}.priceSymbol must be a string`);
+      else if (SUPPORTED_PRICE_SYMBOLS.includes(entry.priceSymbol)) token.priceSymbol = entry.priceSymbol;
+      else dropped.push(`${label}.priceSymbol "${entry.priceSymbol}" is not an asset the wallet's price feed quotes`);
+    }
+    tokens.push(token);
+  });
+  const faucetIds = new Set();
+  const symbols = new Set();
+  for (const token of tokens) {
+    if (token.faucetId !== undefined && faucetIds.has(token.faucetId)) {
+      errors.push(`swap.tokens names faucet ${token.faucetId} twice`);
+    }
+    if (typeof token.symbol === 'string' && symbols.has(token.symbol)) {
+      errors.push(`swap.tokens names symbol ${token.symbol} twice`);
+    }
+    faucetIds.add(token.faucetId);
+    symbols.add(token.symbol);
+  }
+  return tokens;
+}
+
+/**
+ * Repo rules, not parse rules: one swap token gives the wallet nothing to open the form on, and a
+ * list without the quote service leaves every pair unquoted.
+ */
+export function swapErrors(config) {
+  const errors = [];
+  const count = config.swap.tokens.length;
+  if (count > 0 && count < MIN_SWAP_TOKENS) {
+    errors.push(`swap.tokens must name at least ${MIN_SWAP_TOKENS} tokens, or none`);
+  }
+  if (count > 0 && config.swap.etaUrl === undefined) {
+    errors.push('swap.tokens is set but swap.etaUrl is missing');
+  }
+  return errors;
 }
 
 export function parseBridgeConfig(body, network, options) {
@@ -394,7 +481,7 @@ export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fet
   errors.push(...parsed.errors);
   notes.push(...parsed.dropped.map(reason => `dropped: ${reason}`));
   if (parsed.config === null) return { errors, notes };
-  errors.push(...switchErrors(parsed.config));
+  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config));
   const bump = versionError(text, parsed.config.version, baseText(baseRef, file, root));
   if (bump !== null) errors.push(bump);
   if (smoke && errors.length === 0) {
