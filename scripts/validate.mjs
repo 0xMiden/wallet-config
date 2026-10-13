@@ -9,7 +9,8 @@
  *
  * Three layers, in order: the wallet's own parse rules (ported from the wallet's
  * src/lib/remote-config/schema.ts; the two must agree on every rule), the repo rules (file name,
- * version bump, valid countdown publication, switched-on features have every value they need),
+ * version bump, valid countdown publication, switched-on features have every value they need,
+ * no USDCx chain name given twice),
  * and a deploy smoke test that finds EVM contracts and service health routes for enabled features.
  * No dependencies: Node 22 only.
  */
@@ -18,8 +19,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const BRIDGE_SWITCHES = ['earn', 'fastBridge', 'bridgeIn', 'bridgeOut'];
+export const BRIDGE_SWITCHES = ['earn', 'fastBridge', 'bridgeIn', 'bridgeOut', 'usdcxIn', 'usdcxOut'];
 export const SUPPORTED_EVM_CHAIN_IDS = [11155111];
+/** The EVM chains the wallet ships a definition for, which a `usdcx.chains` entry can name. */
+export const SUPPORTED_USDCX_CHAIN_IDS = [11155111, 5042002, 84532, 421614];
 export const SUPPORTED_EARN_PROTOCOLS = ['dummy-lending'];
 /** The marks the wallet ships for a swap token's logo (components/TokenLogo). */
 export const SUPPORTED_SWAP_TOKEN_LOGOS = ['MIDEN', 'ETH', 'USDC', 'BTC'];
@@ -35,14 +38,25 @@ const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 // A token symbol as the protocol's TokenSymbol allows it: 1 to 6 upper-case ASCII letters.
 const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
+// A usdcx.chains key: lowercase letters and digits, in groups joined by one hyphen.
+const USDCX_CHAIN_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+// A Circle domain is a uint32 in the contracts.
+const MAX_UINT32 = 0xffffffff;
 
-/** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
+/**
+ * Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy.
+ * The chains after Sepolia carry only the RPC of their public chain definition. The smoke test skips
+ * a USDCx chain that has no entry here.
+ */
 export const EVM_RPCS = {
   11155111: [
     'https://ethereum-sepolia-rpc.publicnode.com',
     'https://1rpc.io/sepolia',
     'https://11155111.rpc.thirdweb.com'
-  ]
+  ],
+  5042002: ['https://rpc.testnet.arc.io'],
+  84532: ['https://sepolia.base.org'],
+  421614: ['https://sepolia-rollup.arbitrum.io/rpc']
 };
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -200,6 +214,8 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     etaUrl: readUrl(swapIn, 'swap', 'etaUrl', allowLocalHttp, errors)
   };
 
+  const usdcx = readUsdcx(body.usdcx, allowLocalHttp, errors, dropped);
+
   const mainnetCountdown = readCountdown(body.mainnetCountdown);
 
   // The wallet's onboarding read (schema.ts): absent means the wallet's own default, a wrong type
@@ -213,10 +229,227 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
 
   if (errors.length > 0) return { config: null, errors, dropped };
   return {
-    config: { network, version, evm, agglayer, epoch, features, swap, mainnetCountdown, onboarding },
+    config: { network, version, evm, agglayer, epoch, features, swap, usdcx, mainnetCountdown, onboarding },
     errors,
     dropped
   };
+}
+
+/** A required 20-byte address: readPattern reports a bad one, this reports a missing one. */
+function readRequiredAddress(section, label, field, errors) {
+  const address = readPattern(section, label, field, EVM_ADDRESS, 'a 20-byte 0x address', errors);
+  if (section[field] === undefined) errors.push(`${label}.${field} is required`);
+  return address;
+}
+
+const isUint32 = value => Number.isSafeInteger(value) && value >= 0 && value <= MAX_UINT32;
+
+/**
+ * How a deposit starts on a chain (schema.ts readUsdcxDeposit). A route the wallet does not know is
+ * dropped, not an error: the chain is then a withdrawal destination only.
+ */
+function readUsdcxDeposit(value, label, errors, dropped) {
+  if (!isRecord(value)) {
+    errors.push(`${label} must be an object`);
+    return undefined;
+  }
+  switch (value.route) {
+    case 'xreserve':
+      return { route: 'xreserve', xReserve: readRequiredAddress(value, label, 'xReserve', errors) };
+    case 'executor':
+      return {
+        route: 'executor',
+        tokenMessenger: readRequiredAddress(value, label, 'tokenMessenger', errors),
+        tokenMessengerWithFees: readRequiredAddress(value, label, 'tokenMessengerWithFees', errors)
+      };
+    default:
+      if (typeof value.route !== 'string') errors.push(`${label}.route must be a string`);
+      else dropped.push(`${label}.route "${value.route}" is not a route the wallet supports`);
+      return undefined;
+  }
+}
+
+function readUsdcxExecutor(value, label, errors) {
+  if (!isRecord(value)) {
+    errors.push(`${label} must be an object`);
+    return undefined;
+  }
+  return {
+    address: readRequiredAddress(value, label, 'address', errors),
+    handler: readRequiredAddress(value, label, 'handler', errors)
+  };
+}
+
+/** One chain of the USDCx routes (schema.ts readUsdcxChain). `chainId` is the document's value, supported or not. */
+function readUsdcxChain(name, value, errors, dropped) {
+  const label = `usdcx.chains.${name}`;
+  if (!USDCX_CHAIN_NAME.test(name)) {
+    errors.push(`usdcx.chains key "${name}" must be lowercase letters and digits, in groups joined by one hyphen`);
+  }
+  if (!isRecord(value)) {
+    errors.push(`${label} must be an object`);
+    return undefined;
+  }
+  const { chainId, domain } = value;
+  if (!Number.isSafeInteger(chainId) || chainId < 1) errors.push(`${label}.chainId must be a positive safe integer`);
+  if (!isUint32(domain)) errors.push(`${label}.domain must be an integer from 0 to ${MAX_UINT32}`);
+  const usdc = readRequiredAddress(value, label, 'usdc', errors);
+  const deposit =
+    value.deposit === undefined ? undefined : readUsdcxDeposit(value.deposit, `${label}.deposit`, errors, dropped);
+  const hasExecutor = value.executor !== undefined;
+  const executor = hasExecutor ? readUsdcxExecutor(value.executor, `${label}.executor`, errors) : undefined;
+  // The executor deposits into the xReserve of its own chain.
+  if (hasExecutor && deposit?.route !== 'xreserve') {
+    errors.push(`${label}.executor is valid only on a chain whose deposit.route is "xreserve"`);
+  }
+  return { name, chainId, domain, usdc, deposit, executor, hasExecutor };
+}
+
+/**
+ * The chains in the document's order, which is the wallet's picker order (schema.ts readUsdcxChains).
+ * Two entries for one chain id, or two executors, reject the document. A chain the wallet ships no
+ * definition for is dropped after those two checks, as the wallet does.
+ */
+function readUsdcxChains(value, errors, dropped) {
+  if (!isRecord(value)) {
+    errors.push('usdcx.chains must be an object');
+    return [];
+  }
+  const read = Object.entries(value)
+    .map(([name, chain]) => readUsdcxChain(name, chain, errors, dropped))
+    .filter(chain => chain !== undefined);
+  const chainIds = new Set();
+  for (const { chainId } of read) {
+    if (!Number.isSafeInteger(chainId)) continue;
+    if (chainIds.has(chainId)) errors.push(`usdcx.chains names chain id ${chainId} twice`);
+    chainIds.add(chainId);
+  }
+  if (read.filter(chain => chain.hasExecutor).length > 1) {
+    errors.push('usdcx.chains must name at most one chain with an executor');
+  }
+  const chains = [];
+  for (const { hasExecutor, ...chain } of read) {
+    if (SUPPORTED_USDCX_CHAIN_IDS.includes(chain.chainId)) {
+      chains.push(chain);
+    } else if (Number.isSafeInteger(chain.chainId) && chain.chainId >= 1) {
+      dropped.push(
+        `usdcx.chains.${chain.name}: chain id ${chain.chainId} is not a chain the wallet supports ` +
+          `(${SUPPORTED_USDCX_CHAIN_IDS.join(', ')})`
+      );
+    }
+  }
+  return chains;
+}
+
+/**
+ * The wallet's USDCx read (schema.ts readUsdcx). Undefined means the document has no `usdcx`
+ * section: USDCx deposits and withdrawals are not configured.
+ */
+function readUsdcx(value, allowLocalHttp, errors, dropped) {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    errors.push('usdcx must be an object');
+    return undefined;
+  }
+  if (value.midenDomain === undefined) errors.push('usdcx.midenDomain is required');
+  else if (!isUint32(value.midenDomain)) errors.push(`usdcx.midenDomain must be an integer from 0 to ${MAX_UINT32}`);
+  if (value.attestationUrl === undefined) errors.push('usdcx.attestationUrl is required');
+  if (value.chains === undefined) errors.push('usdcx.chains is required');
+  return {
+    midenDomain: value.midenDomain,
+    attestationUrl: readUrl(value, 'usdcx', 'attestationUrl', allowLocalHttp, errors),
+    irisUrl: readUrl(value, 'usdcx', 'irisUrl', allowLocalHttp, errors),
+    chains: value.chains === undefined ? [] : readUsdcxChains(value.chains, errors, dropped)
+  };
+}
+
+/** The chain every `executor` deposit goes to (schema.ts usdcxExecutorChain). */
+export function usdcxExecutorChain(usdcx) {
+  return usdcx.chains.find(chain => chain.executor && chain.deposit?.route === 'xreserve');
+}
+
+/**
+ * Whether a deposit can start on `chain` (schema.ts isUsdcxDepositSource). An `executor` deposit
+ * needs the executor chain and Circle's Iris API.
+ */
+export function isUsdcxDepositSource(usdcx, chain) {
+  switch (chain.deposit?.route) {
+    case 'xreserve':
+      return true;
+    case 'executor':
+      return usdcx.irisUrl !== undefined && usdcxExecutorChain(usdcx) !== undefined;
+    default:
+      return false;
+  }
+}
+
+/**
+ * The keys an object in `text` names more than once. `target` is the path of the object from the
+ * document's root. JSON.parse keeps the last of two equal keys without a word, so only the text can
+ * show the mistake. `text` must be valid JSON.
+ */
+export function duplicateKeys(text, target) {
+  const duplicates = [];
+  let at = 0;
+  const skipSpace = () => {
+    while (at < text.length && ' \t\n\r'.includes(text[at])) at++;
+  };
+  const readString = () => {
+    const start = at++;
+    while (text[at] !== '"') at += text[at] === '\\' ? 2 : 1;
+    at++;
+    return JSON.parse(text.slice(start, at));
+  };
+  // An array index is a number in the path, so it never equals a key of `target`.
+  const readValue = path => {
+    skipSpace();
+    switch (text[at]) {
+      case '{': {
+        const watched = path.length === target.length && path.every((key, index) => key === target[index]);
+        const seen = new Set();
+        at++;
+        skipSpace();
+        while (text[at] !== '}') {
+          const key = readString();
+          if (watched && seen.has(key) && !duplicates.includes(key)) duplicates.push(key);
+          seen.add(key);
+          skipSpace();
+          at++; // the colon
+          readValue([...path, key]);
+          skipSpace();
+          if (text[at] === ',') at++;
+          skipSpace();
+        }
+        at++;
+        return;
+      }
+      case '[': {
+        at++;
+        skipSpace();
+        for (let index = 0; text[at] !== ']'; index++) {
+          readValue([...path, index]);
+          skipSpace();
+          if (text[at] === ',') at++;
+          skipSpace();
+        }
+        at++;
+        return;
+      }
+      case '"':
+        readString();
+        return;
+      default:
+        // A number, true, false or null.
+        while (at < text.length && !',]} \t\n\r'.includes(text[at])) at++;
+    }
+  };
+  readValue([]);
+  return duplicates;
+}
+
+/** A repo rule: the wallet cannot see a chain name that the document gives twice, so the document must not. */
+export function usdcxDuplicateErrors(text) {
+  return duplicateKeys(text, ['usdcx', 'chains']).map(name => `usdcx.chains names chain "${name}" twice`);
 }
 
 /**
@@ -307,10 +540,24 @@ export const FEATURE_REQUIREMENTS = {
   fastBridge: ['evm.chainId', 'epoch.allocatorUrl', 'epoch.midenUsdcFaucet', 'epoch.evmUsdc'],
   bridgeIn: ['evm.chainId', 'agglayer.l1Bridge', 'agglayer.midenBridge', 'agglayer.indexerUrl'],
   // The L1 bridge gives the destination network id; the indexer is what Claim polls afterwards.
-  bridgeOut: ['evm.chainId', 'agglayer.l1Bridge', 'agglayer.midenBridge', 'agglayer.indexerUrl']
+  bridgeOut: ['evm.chainId', 'agglayer.l1Bridge', 'agglayer.midenBridge', 'agglayer.indexerUrl'],
+  // The wallet's own two requirements (availability.ts usdcxSource and usdcxDestination).
+  usdcxIn: ['usdcx.chains[].deposit'],
+  usdcxOut: ['usdcx.chains']
+};
+
+// Undefined reads as missing. A chain the wallet does not support is not in the parsed list.
+const some = found => (found ? true : undefined);
+
+/** The USDCx requirements are facts about the whole chain list, not one field. */
+const COMPUTED_VALUES = {
+  'usdcx.chains[].deposit': ({ usdcx }) => some(usdcx?.chains.some(chain => isUsdcxDepositSource(usdcx, chain))),
+  'usdcx.chains': ({ usdcx }) => some(usdcx !== undefined && usdcx.chains.length > 0)
 };
 
 const valueAt = (config, dotted) => {
+  const computed = COMPUTED_VALUES[dotted];
+  if (computed) return computed(config);
   const [section, field] = dotted.split('.');
   return config[section][field];
 };
@@ -415,7 +662,51 @@ export function plannedChecks(config) {
       healthy: body => body?.status === 'SERVING'
     });
   }
+  for (const check of plannedUsdcxChecks(config)) add(check);
   return [...checks.values()];
+}
+
+/**
+ * The USDCx contract checks. A withdrawal needs USDC on each destination; a deposit needs the
+ * contracts of each chain it can start on, and an `executor` deposit needs the executor chain's too.
+ * Circle's two services publish no health route, so no check reads them.
+ */
+function plannedUsdcxChecks(config) {
+  const { usdcx, features } = config;
+  if (usdcx === undefined || !(features.usdcxIn || features.usdcxOut)) return [];
+  const checks = [];
+  const code = (chain, what, address) =>
+    checks.push({
+      key: `code:${chain.chainId}:${address}`,
+      kind: 'evm-code',
+      label: `USDCx ${chain.name} ${what}`,
+      chainId: chain.chainId,
+      address
+    });
+  const sources = features.usdcxIn ? usdcx.chains.filter(chain => isUsdcxDepositSource(usdcx, chain)) : [];
+  const executorChain = sources.some(chain => chain.deposit.route === 'executor') ? usdcxExecutorChain(usdcx) : undefined;
+  for (const chain of usdcx.chains) {
+    const isSource = sources.includes(chain);
+    // A chain with no RPC here is not checked. A chain that is only a deposit source is not read while usdcxIn is off.
+    if (EVM_RPCS[chain.chainId] === undefined || !(features.usdcxOut || isSource)) continue;
+    checks.push({
+      key: `evm-chain:${chain.chainId}`,
+      kind: 'evm-chain',
+      label: `USDCx ${chain.name} RPC`,
+      chainId: chain.chainId
+    });
+    code(chain, 'USDC', chain.usdc);
+    if (isSource && chain.deposit.route === 'xreserve') code(chain, 'xReserve', chain.deposit.xReserve);
+    if (isSource && chain.deposit.route === 'executor') {
+      code(chain, 'TokenMessenger', chain.deposit.tokenMessenger);
+      code(chain, 'TokenMessenger with fees', chain.deposit.tokenMessengerWithFees);
+    }
+    if (chain === executorChain) {
+      code(chain, 'executor', chain.executor.address);
+      code(chain, 'executor handler', chain.executor.handler);
+    }
+  }
+  return checks;
 }
 
 async function fetchWithTimeout(fetchImpl, url, init = {}) {
@@ -467,10 +758,12 @@ async function runCheck(check, config, fetchImpl) {
         : { ok: false, detail: `RPC answers chain ${answered}, expected ${check.chainId}` };
     }
     case 'evm-code': {
-      const code = await evmRpc(config.evm.chainId, 'eth_getCode', [check.address, 'latest'], fetchImpl);
+      // A USDCx check names its own chain; the others read the document's one EVM chain.
+      const chainId = check.chainId ?? config.evm.chainId;
+      const code = await evmRpc(chainId, 'eth_getCode', [check.address, 'latest'], fetchImpl);
       return code.length > 2
         ? { ok: true, detail: `${check.address} has ${(code.length - 2) / 2} bytes of code` }
-        : { ok: false, detail: `${check.address} has no code on chain ${config.evm.chainId}` };
+        : { ok: false, detail: `${check.address} has no code on chain ${chainId}` };
     }
     case 'evm-uint': {
       const result = await evmRpc(
@@ -531,7 +824,12 @@ export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fet
   errors.push(...parsed.errors);
   notes.push(...parsed.dropped.map(reason => `dropped: ${reason}`));
   if (parsed.config === null) return { errors, notes };
-  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config), ...countdownErrors(body));
+  errors.push(
+    ...switchErrors(parsed.config),
+    ...swapErrors(parsed.config),
+    ...countdownErrors(body),
+    ...usdcxDuplicateErrors(text)
+  );
   const bump = versionError(text, parsed.config.version, baseText(baseRef, file, root));
   if (bump !== null) errors.push(bump);
   if (smoke && errors.length === 0) {

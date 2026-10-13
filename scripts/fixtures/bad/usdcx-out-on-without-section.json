@@ -1,0 +1,1 @@
+{"_expect": "features.usdcxOut is on but usdcx.chains is missing or unsupported", "network": "testnet", "version": 1, "features": {"usdcxOut": true}}

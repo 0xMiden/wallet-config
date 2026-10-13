@@ -1,0 +1,1 @@
+{"_expect": "usdcx.chains.arc-testnet.deposit.xReserve is required", "network": "testnet", "version": 1, "usdcx": {"midenDomain": 10007, "attestationUrl": "https://xreserve-api-testnet.circle.com", "chains": {"arc-testnet": {"chainId": 5042002, "domain": 26, "usdc": "0x3600000000000000000000000000000000000000", "deposit": {"route": "xreserve"}}}}}
