@@ -4,6 +4,6 @@
   "features": { "earn": false, "fastBridge": false, "bridgeIn": false, "bridgeOut": false },
   "onboarding": { "inviteOnly": false },
   "guardians": [
-    { "id": "open-zeppelin", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST", "endpoint": "https://guardian-stg.openzeppelin.com" }
+    { "id": "open-zeppelin", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST", "endpoint": "https://guardian-devnet.openzeppelin.com" }
   ]
 }

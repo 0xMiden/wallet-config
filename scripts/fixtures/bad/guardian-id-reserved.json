@@ -1,1 +1,1 @@
-{"_expect": "guardians[0].id \"custom\" is reserved by the wallet", "network": "testnet", "version": 1, "guardians": [{"id": "custom", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST", "endpoint": "https://guardian.openzeppelin.com"}]}
+{"_expect": "guardians[0].id \"custom\" is reserved by the wallet", "network": "testnet", "version": 1, "guardians": [{"id": "custom", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST", "endpoint": "https://guardian-testnet.openzeppelin.com"}]}

@@ -255,7 +255,7 @@ test("preserves the published feature keys and validates their boolean values", 
 const FIXTURES = new URL("./fixtures/", import.meta.url);
 const readFixture = (kind, name) =>
   JSON.parse(readFileSync(new URL(`${kind}/${name}`, FIXTURES)));
-const OZ = "https://guardian.openzeppelin.com";
+const OZ = "https://guardian-testnet.openzeppelin.com";
 const KODA = "https://guardian-testnet.kodax.com";
 const commitmentOf = (digit) => `0x${digit.repeat(64)}`;
 
