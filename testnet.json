@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 6,
+  "version": 7,
   "evm": { "chainId": 11155111 },
   "agglayer": {
     "l1Bridge": "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
@@ -10,7 +10,7 @@
   "epoch": {
     "allocatorUrl": "https://testnet-dev.epochprotocol.xyz",
     "positionsUrl": "https://positions-testnet-dev.epochprotocol.xyz",
-    "midenUsdcFaucet": "0x537c15a622074e91188aa894456c52",
+    "midenUsdcFaucet": "0x5b043dcb48d5721106f7a1ceb2b804",
     "evmUsdc": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
     "earnProtocol": "dummy-lending"
   },
