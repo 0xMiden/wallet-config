@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 5,
+  "version": 6,
   "evm": { "chainId": 11155111 },
   "agglayer": {
     "l1Bridge": "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
@@ -15,7 +15,7 @@
     "earnProtocol": "dummy-lending"
   },
   "features": { "earn": true, "fastBridge": true, "bridgeIn": true, "bridgeOut": true },
-  "mainnetCountdown": { "enabled": true, "launchAt": "2026-10-26T16:00:00Z" },
+  "mainnetCountdown": { "enabled": false, "launchAt": "2026-10-26T16:00:00Z" },
   "onboarding": { "inviteOnly": false },
   "swap": {
     "etaUrl": "https://35-175-40-181.sslip.io",
