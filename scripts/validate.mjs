@@ -150,11 +150,10 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   if (!Number.isSafeInteger(body.version) || body.version < 1)
     errors.push("version must be a positive safe integer");
   const featuresIn = readSection(body, "features", errors);
-  if (featuresIn.earn !== undefined && typeof featuresIn.earn !== "boolean")
-    errors.push("features.earn must be boolean");
-  const legacyFeatures = ['fastBridge', 'bridgeIn', 'bridgeOut', 'usdcxIn', 'usdcxOut'];
-  if (legacyFeatures.some(name => featuresIn[name] === true)) {
-    errors.push('legacy bridge switches cannot enable new routes');
+  const featureNames = ["earn", "fastBridge", "bridgeIn", "bridgeOut"];
+  for (const name of featureNames) {
+    if (featuresIn[name] !== undefined && typeof featuresIn[name] !== "boolean")
+      errors.push(`features.${name} must be boolean`);
   }
   const providers = readSection(body, "bridge-providers", errors);
   const chains = readSection(body, "supportedEvmChains", errors);
@@ -334,7 +333,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
       ? null
       : {
           ...body,
-          features: { earn: featuresIn.earn === true },
+          features: { ...featuresIn, earn: featuresIn.earn === true },
           "bridge-providers": providers,
           supportedEvmChains: chains,
           swap,

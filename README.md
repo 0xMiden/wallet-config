@@ -9,8 +9,12 @@ Mainnet configuration is deferred.
 
 ## Bridge configuration
 
-`features` has one switch: `earn`. It controls new Earn deposits. The wallet gets Earn
-markets from the Epoch services. This document does not configure markets.
+`features` keeps the existing switches: `earn`, `fastBridge`, `bridgeIn`, and
+`bridgeOut`. `earn` controls new Earn deposits. `fastBridge` controls Epoch
+transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer deposits
+and withdrawals. A false global switch disables new transfers even when a chain
+route is enabled. When a bridge switch is omitted, the per-chain switches apply.
+The wallet gets Earn markets from Epoch. This document does not configure markets.
 
 `bridge-providers` holds shared services:
 

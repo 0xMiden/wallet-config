@@ -223,3 +223,16 @@ test("smoke checks report contract and service failures", async (t) => {
     });
   }
 });
+
+test("preserves the published feature keys and validates their boolean values", () => {
+  assert.deepEqual(source.features, { earn: true, fastBridge: true, bridgeIn: true, bridgeOut: true });
+  for (const name of Object.keys(source.features)) {
+    const body = copy();
+    body.features[name] = false;
+    const result = parseBridgeConfigDetailed(body, "testnet");
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.config.features[name], false);
+    body.features[name] = "true";
+    assert.ok(errors(body).some(error => error.includes(`features.${name}`)));
+  }
+});
