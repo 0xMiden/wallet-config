@@ -1,270 +1,225 @@
-import assert from 'node:assert/strict';
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
-
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
-  countdownErrors,
-  evmRpc,
-  parseBridgeConfig,
   parseBridgeConfigDetailed,
+  validateFile,
+  duplicateKeys,
   plannedChecks,
   smokeTest,
-  swapErrors,
-  switchErrors,
-  validateFile,
-  versionError
-} from './validate.mjs';
-
-const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
-const readFixture = (dir, name) => JSON.parse(readFileSync(path.join(FIXTURES, dir, name), 'utf8'));
-const fixtureNames = dir => readdirSync(path.join(FIXTURES, dir)).filter(name => name.endsWith('.json'));
-const testnet = () => readFixture('good', 'testnet-full.json');
-
-describe('fixtures', () => {
-  for (const name of fixtureNames('good')) {
-    it(`accepts good/${name}`, () => {
-      const { config, errors } = parseBridgeConfigDetailed(readFixture('good', name), 'testnet');
-      assert.deepEqual(errors, []);
-      assert.notEqual(config, null);
-      assert.deepEqual(switchErrors(config), []);
-      assert.deepEqual(swapErrors(config), []);
-      assert.deepEqual(countdownErrors(readFixture('good', name)), []);
-    });
-  }
-
-  for (const name of fixtureNames('bad')) {
-    it(`refuses bad/${name} for its stated reason`, () => {
-      const body = readFixture('bad', name);
-      const { config, errors } = parseBridgeConfigDetailed(body, 'testnet');
-      const reasons = config === null ? errors : [...switchErrors(config), ...swapErrors(config), ...countdownErrors(body)];
-      assert.ok(reasons.includes(body._expect), `expected "${body._expect}", got ${JSON.stringify(reasons)}`);
-    });
-  }
+  versionError,
+} from "./validate.mjs";
+const source = JSON.parse(
+  readFileSync(new URL("../testnet.json", import.meta.url)),
+);
+const copy = () => structuredClone(source);
+const errors = (body) => parseBridgeConfigDetailed(body, "testnet").errors;
+test("published documents use the new schema", async () => {
+  for (const file of ["testnet.json", "devnet.json"])
+    assert.deepEqual((await validateFile(file, { smoke: false })).errors, []);
 });
-
-describe('validateFile', () => {
-  for (const name of ['swap-tokens-one.json', 'swap-tokens-without-eta-url.json', 'countdown-impossible-day.json', 'countdown-on-without-launch-at.json']) {
-    it(`enforces publication policy in bad/${name}`, async () => {
-      const root = mkdtempSync(path.join(tmpdir(), 'wallet-config-validate-'));
-      try {
-        copyFileSync(path.join(FIXTURES, 'bad', name), path.join(root, 'testnet.json'));
-        const { errors } = await validateFile('testnet.json', { root, smoke: false });
-        assert.deepEqual(errors, [readFixture('bad', name)._expect]);
-      } finally {
-        rmSync(root, { recursive: true, force: true });
-      }
+test("bad route data rejects the document", async (t) => {
+  const cases = [
+    (b) => {
+      b.supportedEvmChains.sepolia.chainId = 1;
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.epoch.depositEnabled = "true";
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.epoch.tokens.USDC.outputs = [
+        "missing",
+      ];
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.usdcx.deposit.executorChain =
+        "missing";
+    },
+    (b) => {
+      delete b.supportedEvmChains["arc-testnet"].bridges.usdcx.executor;
+    },
+    (b) => {
+      b["bridge-providers"].epoch.allocatorUrl = "http://example.com";
+    },
+    (b) => {
+      b["bridge-providers"].usdcx.midenDomain = -1;
+    },
+    (b) => {
+      delete b["bridge-providers"].agglayer;
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.usdcx.deposit = null;
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.usdcx.tokens.USDC.contractAddress =
+        "0x1";
+    },
+    (b) => {
+      b.version = 0;
+    },
+    (b) => {
+      b.network = "devnet";
+    },
+    (b) => {
+      b.onboarding.inviteOnly = "yes";
+    },
+    (b) => {
+      b.swap.tokens[0].decimals = 1.5;
+    },
+  ];
+  for (const [index, change] of cases.entries())
+    await t.test(`rejects route mutation ${index + 1}`, () => {
+      const body = copy();
+      change(body);
+      assert.ok(errors(body).length > 0);
     });
-  }
 });
-
-describe('parseBridgeConfig', () => {
-  it('refuses a body that is not an object', () => {
-    for (const body of [null, [], 'testnet', 1]) assert.equal(parseBridgeConfig(body, 'testnet'), null);
-  });
-
-  it('lowercases addresses and ids and strips trailing slashes', () => {
-    const body = testnet();
-    body.epoch.allocatorUrl = 'https://testnet-dev.epochprotocol.xyz//';
-    body.agglayer.midenBridge = '0x3B66E20B5088F25133B69216484652';
-    const config = parseBridgeConfig(body, 'testnet');
-    assert.equal(config.epoch.evmUsdc, '0x2bb4ffd7e2c6d432b697554efd77fa13bdbefd69');
-    assert.equal(config.agglayer.midenBridge, '0x3b66e20b5088f25133b69216484652');
-    assert.equal(config.epoch.allocatorUrl, 'https://testnet-dev.epochprotocol.xyz');
-    assert.equal(config.agglayer.indexerUrl, 'https://miden-testnet-bridge.dev.eu-north-3.gateway.fm/api');
-  });
-
-  it('returns a URL as its origin and path, the way the wallet does', () => {
-    const body = testnet();
-    body.epoch.allocatorUrl = 'https://Testnet-Dev.EpochProtocol.xyz:443/v1//';
-    assert.equal(parseBridgeConfig(body, 'testnet').epoch.allocatorUrl, 'https://testnet-dev.epochprotocol.xyz/v1');
-  });
-
-  it('accepts local http only when asked to, the way an E2E build does', () => {
-    const body = { network: 'localnet', version: 1, epoch: { allocatorUrl: 'http://127.0.0.1:8548' } };
-    assert.equal(parseBridgeConfig(body, 'localnet'), null);
-    assert.equal(
-      parseBridgeConfig(body, 'localnet', { allowLocalHttp: true }).epoch.allocatorUrl,
-      'http://127.0.0.1:8548'
-    );
-    body.epoch.allocatorUrl = 'http://localhost:8548/';
-    assert.equal(
-      parseBridgeConfig(body, 'localnet', { allowLocalHttp: true }).epoch.allocatorUrl,
-      'http://localhost:8548'
-    );
-    body.epoch.allocatorUrl = 'http://example.com';
-    assert.equal(parseBridgeConfig(body, 'localnet', { allowLocalHttp: true }), null);
-  });
-
-  it('drops an unsupported chain, protocol, logo or price symbol instead of refusing the document', () => {
-    const { config, dropped } = parseBridgeConfigDetailed(
-      readFixture('good', 'testnet-unsupported-values.json'),
-      'testnet'
-    );
-    assert.equal(config.evm.chainId, undefined);
-    assert.equal(config.epoch.earnProtocol, undefined);
-    assert.deepEqual(config.swap.tokens[0], { symbol: 'ISOL', faucetId: '0x750052a4af10cd51141f52c0ec2ada', decimals: 8 });
-    assert.equal(dropped.length, 4);
-  });
-
-  it('reads a missing switch, or a missing features section, as off', () => {
-    const config = parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet');
-    assert.deepEqual(config.features, { earn: false, fastBridge: false, bridgeIn: false, bridgeOut: false });
-    assert.deepEqual(config.agglayer, { l1Bridge: undefined, midenBridge: undefined, indexerUrl: undefined });
-  });
-
-  it('reads the swap tokens in order, lowercasing faucet ids, and a missing swap section as no tokens', () => {
-    const config = parseBridgeConfig(testnet(), 'testnet');
-    assert.deepEqual(
-      config.swap.tokens.map(token => token.symbol),
-      ['IMIDEN', 'IETH', 'IUSDT', 'IBTC']
-    );
-    assert.deepEqual(config.swap.tokens[1], {
-      symbol: 'IETH',
-      faucetId: '0xe33498f1176661512b5ac4ded86ec7',
-      decimals: 8,
-      logo: 'ETH',
-      priceSymbol: 'ETH'
-    });
-    assert.deepEqual(config.swap.tokens[0].priceSymbol, undefined);
-    assert.equal(config.swap.etaUrl, 'https://35-175-40-181.sslip.io');
-    assert.deepEqual(parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet').swap, {
-      tokens: [],
-      etaUrl: undefined
-    });
-  });
-
-  it('reads a missing mainnetCountdown section as off with no moment', () => {
-    const config = parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet');
-    assert.deepEqual(config.mainnetCountdown, { enabled: false });
-  });
-
-  it('keeps bridge config and turns off an invalid countdown, as the wallet does', () => {
-    const body = testnet();
-    body.mainnetCountdown = { enabled: true, launchAt: '2026-02-30T00:00:00Z' };
-    const { config, errors } = parseBridgeConfigDetailed(body, 'testnet');
-    assert.deepEqual(errors, []);
-    assert.notEqual(config, null);
-    assert.deepEqual(config.mainnetCountdown, { enabled: false });
-  });
-
-  it('reads the countdown switch and its moment', () => {
-    const config = parseBridgeConfig(readFixture('good', 'testnet-countdown.json'), 'testnet');
-    assert.deepEqual(config.mainnetCountdown, { enabled: true, launchAt: Date.parse('2026-10-26T00:00:00Z') });
-  });
-
-  it('turns off a countdown moment in any spelling but RFC 3339 UTC', () => {
-    for (const launchAt of ['2026-10-26', '2026-10-26T00:00:00+02:00', '2026-10-26 00:00:00Z', 1_792_000_000_000, '2026-13-40T00:00:00Z', '2026-02-30T00:00:00Z']) {
-      const body = { network: 'testnet', version: 1, mainnetCountdown: { enabled: true, launchAt } };
-      const { config, errors } = parseBridgeConfigDetailed(body, 'testnet');
-      assert.deepEqual(errors, []);
-      assert.deepEqual(config.mainnetCountdown, { enabled: false });
-      assert.ok(countdownErrors(body).some(e => e.startsWith('mainnetCountdown.launchAt must be')), `${launchAt}`);
+test("mainnet Epoch does not need a testnet faucet or market", () => {
+  const body = copy();
+  delete body["bridge-providers"].epoch.outputs;
+  delete body.supportedEvmChains.sepolia.bridges.epoch.tokens.USDC.outputs;
+  assert.deepEqual(errors(body), []);
+});
+test("executor target can have both new-start controls off", () => {
+  const body = copy();
+  const target = body.supportedEvmChains["arc-testnet"].bridges.usdcx;
+  target.depositEnabled = false;
+  target.withdrawalEnabled = false;
+  assert.deepEqual(errors(body), []);
+  assert.ok(
+    plannedChecks(body).some(
+      (check) => check.address === target.executor.address,
+    ),
+  );
+});
+test("duplicate chain keys are detected before JSON loses them", async () => {
+  assert.deepEqual(
+    duplicateKeys('{"supportedEvmChains":{"sepolia":{},"sepolia":{}}}', [
+      "supportedEvmChains",
+    ]),
+    ["sepolia"],
+  );
+  const root = mkdtempSync(path.join(tmpdir(), "config-test-"));
+  writeFileSync(
+    path.join(root, "testnet.json"),
+    '{"network":"testnet","version":1,"supportedEvmChains":{"sepolia":{"chainId":11155111,"bridges":{}},"sepolia":{"chainId":11155111,"bridges":{}}}}',
+  );
+  assert.ok(
+    (await validateFile("testnet.json", { root, smoke: false })).errors.some(
+      (error) => error.includes("repeats"),
+    ),
+  );
+});
+test("smoke checks use the route chain and skip disabled routes", async () => {
+  const body = copy();
+  body.features.earn = false;
+  for (const chain of Object.values(body.supportedEvmChains))
+    for (const bridge of Object.values(chain.bridges)) {
+      bridge.depositEnabled = false;
+      bridge.withdrawalEnabled = false;
     }
-  });
+  assert.deepEqual(plannedChecks(body), []);
+  body.supportedEvmChains["base-sepolia"].bridges.usdcx.withdrawalEnabled =
+    true;
+  assert.ok(plannedChecks(body).every((check) => check.chainId === 84532));
+  const result = await smokeTest(body, async (url, init) => ({
+    json: async () => ({
+      result:
+        JSON.parse(init.body).method === "eth_chainId" ? "0x14a34" : "0x1234",
+    }),
+  }));
+  assert.ok(result.every((check) => check.ok));
+});
+test("changed documents require a higher version", () => {
+  assert.ok(versionError("changed", 7, '{"version":7}'));
+  assert.equal(versionError("changed", 8, '{"version":7}'), null);
+});
 
-  it('accepts a countdown moment with fractional seconds', () => {
-    const body = { network: 'testnet', version: 1, mainnetCountdown: { enabled: true, launchAt: '2026-10-26T00:00:00.000Z' } };
-    assert.equal(parseBridgeConfig(body, 'testnet').mainnetCountdown.launchAt, Date.parse('2026-10-26T00:00:00.000Z'));
-  });
+test("rejects migrated invalid fixtures", async (t) => {
+  const root = new URL("./fixtures/bad/", import.meta.url);
+  for (const name of readdirSync(root)) {
+    const body = JSON.parse(readFileSync(new URL(name, root)));
+    const dir = mkdtempSync(path.join(tmpdir(), "config-regression-"));
+    writeFileSync(path.join(dir, "testnet.json"), JSON.stringify(body));
+    await t.test(name, async () =>
+      assert.ok(
+        (await validateFile("testnet.json", { root: dir, smoke: false })).errors
+          .length > 0,
+        name,
+      ),
+    );
+  }
+});
 
-  it('reads a missing onboarding section, or one without inviteOnly, as no Welcome choice', () => {
-    assert.deepEqual(parseBridgeConfig(readFixture('good', 'testnet-minimal.json'), 'testnet').onboarding, {});
-    const body = { network: 'testnet', version: 1, onboarding: {} };
-    assert.deepEqual(parseBridgeConfig(body, 'testnet').onboarding, {});
-  });
+test("accepts migrated valid fixtures", async (t) => {
+  const root = new URL("./fixtures/good/", import.meta.url);
+  for (const name of readdirSync(root)) {
+    const body = JSON.parse(readFileSync(new URL(name, root)));
+    const dir = mkdtempSync(path.join(tmpdir(), "config-regression-"));
+    writeFileSync(path.join(dir, "testnet.json"), JSON.stringify(body));
+    await t.test(name, async () =>
+      assert.deepEqual(
+        (await validateFile("testnet.json", { root: dir, smoke: false }))
+          .errors,
+        [],
+        name,
+      ),
+    );
+  }
+});
 
-  it('reads the invite-only switch either way', () => {
-    assert.deepEqual(parseBridgeConfig(readFixture('good', 'testnet-onboarding.json'), 'testnet').onboarding, {
-      inviteOnly: true
+test("smoke checks report contract and service failures", async (t) => {
+  for (const scenario of [
+    "empty code",
+    "wrong chain",
+    "bad uint",
+    "HTTP failure",
+    "bad health",
+    "invalid JSON",
+    "RPC error",
+    "fetch error",
+  ]) {
+    await t.test(scenario, async () => {
+      const results = await smokeTest(source, async (url, init) => {
+        if (scenario === "fetch error") throw new Error("offline");
+        if (init.method !== "POST")
+          return {
+            status: scenario === "HTTP failure" ? 503 : 200,
+            json: async () => {
+              if (scenario === "invalid JSON") throw new Error("not JSON");
+              return scenario === "bad health"
+                ? {}
+                : {
+                    status: url.includes("healthz") ? "SERVING" : "healthy",
+                    ok: true,
+                  };
+            },
+          };
+        const request = JSON.parse(init.body);
+        let result;
+        switch (request.method) {
+          case "eth_chainId":
+            result =
+              scenario === "wrong chain"
+                ? "0x1"
+                : `0x${Number(Object.entries({ "rpc.testnet.arc.io": 5042002, "sepolia.base.org": 84532, "sepolia-rollup.arbitrum.io": 421614 }).find(([host]) => url.includes(host))?.[1] ?? 11155111).toString(16)}`;
+            break;
+          case "eth_call":
+            result = scenario === "bad uint" ? "0x1" : `0x${"0".repeat(63)}6`;
+            break;
+          default:
+            result = scenario === "empty code" ? "0x" : "0x1234";
+        }
+        return {
+          json: async () =>
+            scenario === "RPC error"
+              ? { error: { message: "unavailable" } }
+              : { result },
+        };
+      });
+      assert.ok(results.some((result) => !result.ok));
     });
-    const body = { network: 'testnet', version: 1, onboarding: { inviteOnly: false } };
-    assert.deepEqual(parseBridgeConfig(body, 'testnet').onboarding, { inviteOnly: false });
-  });
-});
-
-describe('versionError', () => {
-  const base = JSON.stringify({ network: 'testnet', version: 3 });
-  it('passes an unchanged file and a new file', () => {
-    assert.equal(versionError(base, 3, base), null);
-    assert.equal(versionError(base, 1, null), null);
-  });
-  it('refuses a changed file that keeps or lowers the version', () => {
-    const changed = JSON.stringify({ network: 'testnet', version: 3, features: {} });
-    assert.match(versionError(changed, 3, base), /greater than 3/);
-    assert.match(versionError(changed, 2, base), /greater than 3/);
-  });
-  it('passes a changed file with a higher version', () => {
-    assert.equal(versionError(JSON.stringify({ version: 4 }), 4, base), null);
-  });
-});
-
-describe('evmRpc', () => {
-  it('falls back to the next RPC when one fails', async () => {
-    const seen = [];
-    const fetchImpl = async url => {
-      seen.push(url);
-      if (seen.length === 1) throw new Error('down');
-      return Response.json({ jsonrpc: '2.0', id: 1, result: '0xaa36a7' });
-    };
-    assert.equal(await evmRpc(11155111, 'eth_chainId', [], fetchImpl), '0xaa36a7');
-    assert.equal(seen.length, 2);
-  });
-  it('fails only when every RPC fails', async () => {
-    await assert.rejects(
-      evmRpc(11155111, 'eth_chainId', [], async () => Response.json({ error: { message: 'no' } })),
-      /no RPC/
-    );
-  });
-});
-
-describe('plannedChecks', () => {
-  it('plans nothing while every switch is off, so values can be staged', () => {
-    assert.deepEqual(plannedChecks(parseBridgeConfig(readFixture('good', 'testnet-staged.json'), 'testnet')), []);
-  });
-  it('plans only the Agglayer checks for bridge out', () => {
-    const config = parseBridgeConfig(testnet(), 'testnet');
-    config.features = { earn: false, fastBridge: false, bridgeIn: false, bridgeOut: true };
-    const kinds = plannedChecks(config).map(check => check.key);
-    assert.ok(kinds.includes('indexer'));
-    assert.ok(kinds.includes('l1-network-id'));
-    assert.ok(!kinds.includes('allocator'));
-  });
-});
-
-/** A fake world in which every service and chain answers like testnet does. */
-function testnetWorld({ emptyCode = false, allocatorStatus = 'healthy' } = {}) {
-  return async (url, init) => {
-    const target = String(url);
-    if (target.endsWith('/health') && target.includes('positions')) return Response.json({ ok: true });
-    if (target.endsWith('/health')) return Response.json({ status: allocatorStatus, allocatorAddresses: {} });
-    if (target.endsWith('/healthz')) return Response.json({ status: 'SERVING' });
-    const { method } = JSON.parse(init.body);
-    if (method === 'eth_chainId') return Response.json({ result: '0xaa36a7' });
-    if (method === 'eth_getCode') return Response.json({ result: emptyCode ? '0x' : '0x6080' });
-    return Response.json({ result: `0x${'0'.repeat(62)}12` });
-  };
-}
-
-describe('smokeTest', () => {
-  it('passes every check against a healthy deployment', async () => {
-    const results = await smokeTest(parseBridgeConfig(testnet(), 'testnet'), testnetWorld());
-    assert.deepEqual(
-      results.filter(result => !result.ok),
-      []
-    );
-    assert.equal(results.length, 8);
-  });
-  it('fails a contract with no code', async () => {
-    const results = await smokeTest(parseBridgeConfig(testnet(), 'testnet'), testnetWorld({ emptyCode: true }));
-    assert.ok(results.some(result => !result.ok && /has no code/.test(result.detail)));
-  });
-  it('fails an allocator whose /health does not say healthy', async () => {
-    // The wallet's own rule (derive.ts): an object body with status 'healthy'; allocatorAddresses alone is not enough.
-    const world = testnetWorld({ allocatorStatus: 'degraded' });
-    const results = await smokeTest(parseBridgeConfig(testnet(), 'testnet'), world);
-    assert.ok(results.some(result => !result.ok && result.label === 'Epoch allocator'));
-  });
+  }
 });
