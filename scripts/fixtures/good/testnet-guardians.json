@@ -1,0 +1,1 @@
+{"network": "testnet", "version": 2, "guardians": [{"id": "open-zeppelin", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST", "endpoint": "https://guardian.openzeppelin.com"}, {"id": "kodax", "name": "Koda", "operatedBy": "Korea Digital Asset (Koda)", "location": "Asia (SK)", "endpoint": "https://guardian-testnet.kodax.com"}]}

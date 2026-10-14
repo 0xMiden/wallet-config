@@ -1,0 +1,1 @@
+{"_expect": "guardians[0].endpoint is required", "network": "testnet", "version": 1, "guardians": [{"id": "open-zeppelin", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST"}]}

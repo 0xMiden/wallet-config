@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 9,
+  "version": 10,
   "evm": {
     "chainId": 11155111
   },
@@ -23,6 +23,12 @@
   "onboarding": {
     "inviteOnly": false
   },
+  "guardians": [
+    { "id": "open-zeppelin", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST", "endpoint": "https://guardian.openzeppelin.com" },
+    { "id": "gateway", "name": "Gateway Operator", "operatedBy": "Gateway", "location": "EU-NORTH", "endpoint": "https://miden-guardian.dev.eu-north-3.gateway.fm" },
+    { "id": "lambda-class", "name": "LambdaClass", "operatedBy": "LambdaClass", "location": "EU-WEST", "endpoint": "https://miden-guardian.lambdaclass.com" },
+    { "id": "kodax", "name": "Koda", "operatedBy": "Korea Digital Asset (Koda)", "location": "Asia (SK)", "endpoint": "https://guardian-testnet.kodax.com" }
+  ],
   "swap": {
     "etaUrl": "https://35-175-40-181.sslip.io",
     "tokens": [

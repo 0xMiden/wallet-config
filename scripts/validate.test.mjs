@@ -1,10 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  readFileSync,
+  readdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  parseBridgeConfig,
   parseBridgeConfigDetailed,
+  publishedGuardianEndpoints,
   validateFile,
   duplicateKeys,
   plannedChecks,
@@ -15,6 +24,12 @@ const source = JSON.parse(
   readFileSync(new URL("../testnet.json", import.meta.url)),
 );
 const copy = () => structuredClone(source);
+// The route and service checks alone: the Guardian checks have their own tests below.
+const withoutGuardians = () => {
+  const body = copy();
+  delete body.guardians;
+  return body;
+};
 const errors = (body) => parseBridgeConfigDetailed(body, "testnet").errors;
 test("published documents use the new schema", async () => {
   for (const file of ["testnet.json", "devnet.json"])
@@ -113,7 +128,7 @@ test("duplicate chain keys are detected before JSON loses them", async () => {
   );
 });
 test("smoke checks use the route chain and skip disabled routes", async () => {
-  const body = copy();
+  const body = withoutGuardians();
   body.features.earn = false;
   for (const chain of Object.values(body.supportedEvmChains))
     for (const bridge of Object.values(chain.bridges)) {
@@ -182,7 +197,7 @@ test("smoke checks report contract and service failures", async (t) => {
     "fetch error",
   ]) {
     await t.test(scenario, async () => {
-      const results = await smokeTest(source, async (url, init) => {
+      const results = await smokeTest(withoutGuardians(), async (url, init) => {
         if (scenario === "fetch error") throw new Error("offline");
         if (init.method !== "POST")
           return {
@@ -234,5 +249,236 @@ test("preserves the published feature keys and validates their boolean values", 
     assert.equal(result.config.features[name], false);
     body.features[name] = "true";
     assert.ok(errors(body).some(error => error.includes(`features.${name}`)));
+  }
+});
+
+const FIXTURES = new URL("./fixtures/", import.meta.url);
+const readFixture = (kind, name) =>
+  JSON.parse(readFileSync(new URL(`${kind}/${name}`, FIXTURES)));
+const OZ = "https://guardian.openzeppelin.com";
+const KODA = "https://guardian-testnet.kodax.com";
+const commitmentOf = (digit) => `0x${digit.repeat(64)}`;
+
+/** A fake world in which each Guardian answers `GET /pubkey` with what `answers` holds for its origin. */
+function guardianWorld(answers) {
+  return async (url) => {
+    const { origin, pathname, search } = new URL(String(url));
+    assert.equal(pathname + search, "/pubkey?scheme=ecdsa");
+    const answer = answers[origin];
+    if (answer === undefined) throw new Error("unreachable");
+    return typeof answer === "number"
+      ? new Response("down", { status: answer })
+      : Response.json(answer);
+  };
+}
+
+const guardianFixture = () =>
+  parseBridgeConfig(readFixture("good", "testnet-guardians.json"), "testnet");
+const healthyGuardians = {
+  [OZ]: { commitment: commitmentOf("a") },
+  [KODA]: { commitment: commitmentOf("b") },
+};
+const withGuardians = (guardians) => ({
+  network: "testnet",
+  version: 1,
+  guardians,
+});
+const guardianEntry = (index) => ({
+  id: `operator-${index}`,
+  name: "Operator",
+  operatedBy: "Operator",
+  location: "EU",
+  endpoint: `https://guardian-${index}.example.com`,
+});
+
+test("reads no Guardian list from a document that has none, so the wallet keeps its own", () => {
+  const config = parseBridgeConfig(
+    readFixture("good", "testnet-minimal.json"),
+    "testnet",
+  );
+  assert.equal("guardians" in config, false);
+});
+
+test("reads the Guardian list in document order with endpoints in the wallet form", () => {
+  const body = readFixture("good", "testnet-guardians.json");
+  body.guardians[0].endpoint = `${OZ}/`;
+  body.guardians[1].endpoint = "https://GUARDIAN-testnet.kodax.com:443//";
+  assert.deepEqual(parseBridgeConfig(body, "testnet").guardians, [
+    {
+      id: "open-zeppelin",
+      name: "OpenZeppelin",
+      operatedBy: "OpenZeppelin",
+      location: "US-EAST",
+      endpoint: OZ,
+    },
+    {
+      id: "kodax",
+      name: "Koda",
+      operatedBy: "Korea Digital Asset (Koda)",
+      location: "Asia (SK)",
+      endpoint: KODA,
+    },
+  ]);
+});
+
+test("refuses a Guardian list above the limit, a long id, a long label and a control character", () => {
+  const parse = (guardians) =>
+    parseBridgeConfig(withGuardians(guardians), "testnet");
+  const many = (length) =>
+    Array.from({ length }, (_, index) => guardianEntry(index));
+  assert.notEqual(parse(many(16)), null);
+  assert.equal(parse(many(17)), null);
+  assert.equal(parse([{ ...guardianEntry(0), id: "a".repeat(33) }]), null);
+  assert.equal(parse([{ ...guardianEntry(0), id: "a--b" }]), null);
+  assert.equal(parse([{ ...guardianEntry(0), id: "no-guardian" }]), null);
+  assert.equal(parse([{ ...guardianEntry(0), name: "n".repeat(49) }]), null);
+  assert.equal(
+    parse([{ ...guardianEntry(0), operatedBy: "Line\nbreak" }]),
+    null,
+  );
+  assert.equal(parse([{ ...guardianEntry(0), location: 7 }]), null);
+  assert.equal(parse(["https://guardian.example.com"]), null);
+});
+
+test("accepts a local http Guardian endpoint only when the caller allows it", () => {
+  const body = readFixture("good", "testnet-guardians.json");
+  body.guardians[0].endpoint = "http://localhost:3000";
+  assert.equal(parseBridgeConfig(body, "testnet"), null);
+  const config = parseBridgeConfig(body, "testnet", { allowLocalHttp: true });
+  assert.equal(config.guardians[0].endpoint, "http://localhost:3000");
+});
+
+test("plans one Guardian check per operator with every switch off", () => {
+  assert.deepEqual(
+    plannedChecks(guardianFixture()).map(({ key, url, advisory }) => ({
+      key,
+      url,
+      advisory,
+    })),
+    [
+      {
+        key: `guardian:${OZ}`,
+        url: `${OZ}/pubkey?scheme=ecdsa`,
+        advisory: false,
+      },
+      {
+        key: `guardian:${KODA}`,
+        url: `${KODA}/pubkey?scheme=ecdsa`,
+        advisory: false,
+      },
+    ],
+  );
+});
+
+test("makes the check of an operator the base already lists advisory", () => {
+  const checks = plannedChecks(guardianFixture(), { publishedGuardians: [OZ] });
+  assert.deepEqual(
+    checks.map((check) => check.advisory),
+    [true, false],
+  );
+});
+
+test("passes Guardian operators that each serve their own key commitment", async () => {
+  const results = await smokeTest(
+    guardianFixture(),
+    guardianWorld(healthyGuardians),
+  );
+  assert.deepEqual(
+    results.map((result) => result.ok),
+    [true, true],
+  );
+});
+
+test("fails a Guardian operator that is down, answers no commitment or answers a malformed one", async () => {
+  for (const answer of [
+    503,
+    undefined,
+    {},
+    { commitment: "0x1234" },
+    { commitment: 1234 },
+    [],
+  ]) {
+    const results = await smokeTest(
+      guardianFixture(),
+      guardianWorld({ ...healthyGuardians, [KODA]: answer }),
+    );
+    assert.deepEqual(
+      results.map((result) => result.ok),
+      [true, false],
+      JSON.stringify(answer),
+    );
+  }
+});
+
+test("fails the second of two Guardian operators that serve one key commitment, whatever the base lists", async () => {
+  const world = guardianWorld({
+    ...healthyGuardians,
+    [KODA]: { commitment: commitmentOf("A") },
+  });
+  const results = await smokeTest(guardianFixture(), world, {
+    publishedGuardians: [OZ, KODA],
+  });
+  assert.equal(results[1].ok, false);
+  assert.equal(results[1].advisory, false);
+  assert.match(
+    results[1].detail,
+    /serves the key commitment Guardian open-zeppelin serves/,
+  );
+});
+
+test("reads the Guardian endpoints the base document lists, and none from a base without a usable list", () => {
+  const base = JSON.stringify(readFixture("good", "testnet-guardians.json"));
+  assert.deepEqual(publishedGuardianEndpoints(base, "testnet"), [OZ, KODA]);
+  assert.deepEqual(publishedGuardianEndpoints(null, "testnet"), []);
+  assert.deepEqual(publishedGuardianEndpoints("not json", "testnet"), []);
+  assert.deepEqual(
+    publishedGuardianEndpoints(
+      JSON.stringify({ network: "testnet", version: 1 }),
+      "testnet",
+    ),
+    [],
+  );
+  assert.deepEqual(publishedGuardianEndpoints(base, "devnet"), []);
+});
+
+test("refuses a document whose new Guardian operator is down and passes one whose listed operator is down", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "wallet-config-validate-"));
+  try {
+    writeFileSync(
+      path.join(root, "testnet.json"),
+      JSON.stringify(readFixture("good", "testnet-guardians.json")),
+    );
+    const fetchImpl = guardianWorld({ [OZ]: healthyGuardians[OZ], [KODA]: 503 });
+    const added = await validateFile("testnet.json", {
+      root,
+      smoke: true,
+      fetchImpl,
+    });
+    assert.deepEqual(added.errors, [
+      `Guardian kodax: ${KODA}/pubkey?scheme=ecdsa answered HTTP 503`,
+    ]);
+
+    // The same document as the base branch's: every operator is already published.
+    for (const args of [
+      ["init", "-q"],
+      ["add", "."],
+      ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"],
+    ]) {
+      execFileSync("git", args, { cwd: root });
+    }
+    const listed = await validateFile("testnet.json", {
+      root,
+      smoke: true,
+      fetchImpl,
+      baseRef: "HEAD",
+    });
+    assert.deepEqual(listed.errors, []);
+    assert.ok(
+      listed.notes.includes(
+        `warning: Guardian kodax: ${KODA}/pubkey?scheme=ecdsa answered HTTP 503`,
+      ),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
