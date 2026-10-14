@@ -34,6 +34,9 @@ export const MAX_GUARDIANS = 16;
 /** The longest operator id, and the longest name, operator or location the wallet shows. */
 export const MAX_GUARDIAN_ID_LENGTH = 32;
 export const MAX_GUARDIAN_LABEL_LENGTH = 48;
+/** The longest `about` sentence and `kind` line the wallet shows. */
+export const MAX_GUARDIAN_ABOUT_LENGTH = 160;
+export const MAX_GUARDIAN_KIND_LENGTH = 64;
 /** Ids the wallet gives its own entries: the developer's custom endpoint and the no-Guardian choice. */
 export const RESERVED_GUARDIAN_IDS = ["custom", "no-guardian"];
 
@@ -367,21 +370,34 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   };
 }
 
-function readGuardianLabel(entry, label, field, errors) {
+function readGuardianLabel(
+  entry,
+  label,
+  field,
+  errors,
+  maxLength = MAX_GUARDIAN_LABEL_LENGTH,
+) {
   const value = entry[field];
   if (
     typeof value !== "string" ||
     value.length === 0 ||
-    value.length > MAX_GUARDIAN_LABEL_LENGTH ||
+    value.length > maxLength ||
     value !== value.trim() ||
     CONTROL_CHARACTER.test(value)
   ) {
     errors.push(
-      `${label}.${field} must be 1 to ${MAX_GUARDIAN_LABEL_LENGTH} characters with no control character and no space at either end`,
+      `${label}.${field} must be 1 to ${maxLength} characters with no control character and no space at either end`,
     );
     return undefined;
   }
   return value;
+}
+
+// Optional English text the wallet shows as written; absent means the wallet's own words for the id.
+function readGuardianText(entry, label, field, maxLength, errors) {
+  if (entry[field] === undefined) return {};
+  const value = readGuardianLabel(entry, label, field, errors, maxLength);
+  return value === undefined ? {} : { [field]: value };
 }
 
 /**
@@ -427,7 +443,27 @@ function readGuardians(value, allowLocalHttp, errors) {
     const endpoint = readUrl(entry, label, "endpoint", allowLocalHttp, errors);
     if (endpoint === undefined && entry.endpoint === undefined)
       errors.push(`${label}.endpoint is required`);
-    guardians.push({ id, name, operatedBy, location, endpoint });
+    guardians.push({
+      id,
+      name,
+      operatedBy,
+      location,
+      endpoint,
+      ...readGuardianText(
+        entry,
+        label,
+        "about",
+        MAX_GUARDIAN_ABOUT_LENGTH,
+        errors,
+      ),
+      ...readGuardianText(
+        entry,
+        label,
+        "kind",
+        MAX_GUARDIAN_KIND_LENGTH,
+        errors,
+      ),
+    });
   });
   const ids = new Set();
   const endpoints = new Set();

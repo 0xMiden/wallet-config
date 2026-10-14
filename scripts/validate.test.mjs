@@ -340,6 +340,35 @@ test("refuses a Guardian list above the limit, a long id, a long label and a con
   assert.equal(parse(["https://guardian.example.com"]), null);
 });
 
+test("reads a Guardian's English about and kind as written, and leaves them out when absent", () => {
+  const described = {
+    ...guardianEntry(0),
+    about: "A smart contract security company.",
+    kind: "Smart contract security",
+  };
+  assert.deepEqual(
+    parseBridgeConfig(withGuardians([described, guardianEntry(1)]), "testnet")
+      .guardians,
+    [described, guardianEntry(1)],
+  );
+});
+
+test("refuses a Guardian about or kind that is not one line of English text within its limit", () => {
+  const parse = (fields) =>
+    parseBridgeConfig(
+      withGuardians([{ ...guardianEntry(0), ...fields }]),
+      "testnet",
+    );
+  assert.notEqual(parse({ about: "a".repeat(160), kind: "k".repeat(64) }), null);
+  assert.equal(parse({ about: "a".repeat(161) }), null);
+  assert.equal(parse({ kind: "k".repeat(65) }), null);
+  assert.equal(parse({ about: "" }), null);
+  assert.equal(parse({ about: { en: "A security company." } }), null);
+  assert.equal(parse({ about: "Line\nbreak" }), null);
+  assert.equal(parse({ kind: " Padded" }), null);
+  assert.equal(parse({ kind: 7 }), null);
+});
+
 test("accepts a local http Guardian endpoint only when the caller allows it", () => {
   const body = readFixture("good", "testnet-guardians.json");
   body.guardians[0].endpoint = "http://localhost:3000";

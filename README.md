@@ -94,8 +94,19 @@ Absent means the wallet uses the list it ships with.
 | `location`   | The operator's region, as the wallet shows it (1 to 48 characters).                                                                                                                                             |
 | `endpoint`   | The Guardian base URL (`https:`), unique in the list. A trailing slash and a default port are dropped and the host is lower-cased.                                                                              |
 
+Two optional fields describe the operator in English. The wallet shows them as
+written, in every language:
+
+| Field   | Meaning                                                                                                     |
+| ------- | ----------------------------------------------------------------------------------------------------------- |
+| `about` | One sentence on who runs the operator (1 to 160 characters). Onboarding shows it under the operator's name. |
+| `kind`  | A short line on what kind of company runs it (1 to 64 characters). The Change provider sheet shows it.      |
+
+Without them, the wallet shows its own words for the four bundled ids and
+`operatedBy` for any other id.
+
 A text has no control character and no space at either end. Each entry needs
-all five fields.
+the five fields `id`, `name`, `operatedBy`, `location` and `endpoint`.
 
 `guardians` replaces the list the wallet ships with; it does not add to it. The
 wallet uses the list in these places:
