@@ -98,7 +98,10 @@ responses. Check these values before publication.
 Stage a route with both direction switches false. Enable it after its contracts
 and services are ready. Keep route data while transfers can need recovery.
 
-This schema requires the matching wallet release. Released wallets that read the
-old root fields cannot use this document. Do not merge or publish it until the
-wallet release and the configuration rollout have an agreed order. These changes
-do not publish a transition or add old fields for older releases.
+Wallets released before the new reader (1.17.3 and earlier) read only the old
+root fields `evm`, `agglayer`, and `epoch`; without them every bridge and Earn
+feature turns off. Newer wallets
+read only `bridge-providers` and `supportedEvmChains`. Keep both shapes, with the
+same values, until no supported release reads the old fields. A wallet never
+accepts a version below the highest it has accepted, so a revert ships as a new
+version.
