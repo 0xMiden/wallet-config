@@ -1,30 +1,27 @@
 #!/usr/bin/env node
-/**
- * Validates the per-network documents the Miden wallet reads at runtime.
- *
- *   node scripts/validate.mjs                      # every <network>.json at the repo root
- *   node scripts/validate.mjs testnet.json         # one document
- *   node scripts/validate.mjs --no-smoke           # parse and version rules only, no network
- *   BASE_REF=origin/main node scripts/validate.mjs # also require a version bump against that ref
- *
- * Three layers, in order: the wallet's own parse rules (ported from the wallet's
- * src/lib/remote-config/schema.ts; the two must agree on every rule), the repo rules (file name,
- * version bump, valid countdown publication, switched-on features have every value they need),
- * and a deploy smoke test that finds EVM contracts and service health routes for enabled features.
- * No dependencies: Node 22 only.
- */
-import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+/** Validate network documents, version changes, and enabled routes with Node 22. */
+import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const BRIDGE_SWITCHES = ['earn', 'fastBridge', 'bridgeIn', 'bridgeOut'];
-export const SUPPORTED_EVM_CHAIN_IDS = [11155111];
-export const SUPPORTED_EARN_PROTOCOLS = ['dummy-lending'];
+export const BRIDGE_SWITCHES = ["earn"];
+export const CHAIN_IDS = {
+  sepolia: 11155111,
+  "arc-testnet": 5042002,
+  "base-sepolia": 84532,
+  "arbitrum-sepolia": 421614,
+  ethereum: 1,
+  base: 8453,
+  arbitrum: 42161,
+  optimism: 10,
+  arc: 5042,
+};
+export const SUPPORTED_EVM_CHAIN_IDS = Object.values(CHAIN_IDS);
 /** The marks the wallet ships for a swap token's logo (components/TokenLogo). */
-export const SUPPORTED_SWAP_TOKEN_LOGOS = ['MIDEN', 'ETH', 'USDC', 'BTC'];
+export const SUPPORTED_SWAP_TOKEN_LOGOS = ["MIDEN", "ETH", "USDC", "BTC"];
 /** The assets the wallet's price feed quotes (lib/prices/constant.ts KNOWN_SYMBOLS). */
-export const SUPPORTED_PRICE_SYMBOLS = ['ETH', 'BTC', 'USDC'];
+export const SUPPORTED_PRICE_SYMBOLS = ["ETH", "BTC", "USDC"];
 /** A fungible faucet's decimals: the protocol allows up to 12 (miden-objects BasicFungibleFaucet::MAX_DECIMALS). */
 export const MAX_SWAP_TOKEN_DECIMALS = 12;
 /** The swap form opens on the first two tokens, so a list needs at least two. */
@@ -38,31 +35,46 @@ const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
 
 /** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
 export const EVM_RPCS = {
+  5042002: ["https://rpc.testnet.arc.io"],
+  84532: ["https://sepolia.base.org"],
+  421614: ["https://sepolia-rollup.arbitrum.io/rpc"],
+  1: ["https://ethereum-rpc.publicnode.com"],
+  8453: ["https://mainnet.base.org"],
+  42161: ["https://arb1.arbitrum.io/rpc"],
+  10: ["https://mainnet.optimism.io"],
+  5042: ["https://rpc.arc.network"],
   11155111: [
-    'https://ethereum-sepolia-rpc.publicnode.com',
-    'https://1rpc.io/sepolia',
-    'https://11155111.rpc.thirdweb.com'
-  ]
+    "https://ethereum-sepolia-rpc.publicnode.com",
+    "https://1rpc.io/sepolia",
+    "https://11155111.rpc.thirdweb.com",
+  ],
 };
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
-const isRecord = value => typeof value === 'object' && value !== null && !Array.isArray(value);
+const isRecord = (value) =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 function utcTimestamp(value) {
-  if (typeof value !== 'string' || !UTC_TIMESTAMP.test(value)) return undefined;
+  if (typeof value !== "string" || !UTC_TIMESTAMP.test(value)) return undefined;
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return undefined;
-  return new Date(parsed).toISOString().slice(0, 19) === value.slice(0, 19) ? parsed : undefined;
+  return new Date(parsed).toISOString().slice(0, 19) === value.slice(0, 19)
+    ? parsed
+    : undefined;
 }
 
 function readCountdown(value) {
   if (!isRecord(value)) return { enabled: false };
   const { enabled, launchAt } = value;
-  if (enabled !== undefined && typeof enabled !== 'boolean') return { enabled: false };
+  if (enabled !== undefined && typeof enabled !== "boolean")
+    return { enabled: false };
   const moment = launchAt === undefined ? undefined : utcTimestamp(launchAt);
   if (launchAt !== undefined && moment === undefined) return { enabled: false };
-  return { enabled: enabled === true, ...(moment === undefined ? {} : { launchAt: moment }) };
+  return {
+    enabled: enabled === true,
+    ...(moment === undefined ? {} : { launchAt: moment }),
+  };
 }
 
 function readSection(body, name, errors) {
@@ -78,7 +90,7 @@ function readSection(body, name, errors) {
 function readPattern(section, label, field, pattern, kind, errors) {
   const value = section[field];
   if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !pattern.test(value)) {
+  if (typeof value !== "string" || !pattern.test(value)) {
     errors.push(`${label}.${field} must be ${kind}`);
     return undefined;
   }
@@ -89,7 +101,7 @@ function readUrl(section, label, field, allowLocalHttp, errors) {
   const value = section[field];
   if (value === undefined) return undefined;
   const name = `${label}.${field}`;
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     errors.push(`${name} must be a URL string`);
     return undefined;
   }
@@ -100,18 +112,25 @@ function readUrl(section, label, field, allowLocalHttp, errors) {
     errors.push(`${name} is not a URL`);
     return undefined;
   }
-  const local = url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost');
-  if (url.protocol !== 'https:' && !(allowLocalHttp && local)) {
+  const local =
+    url.protocol === "http:" &&
+    (url.hostname === "127.0.0.1" || url.hostname === "localhost");
+  if (url.protocol !== "https:" && !(allowLocalHttp && local)) {
     errors.push(`${name} must use https:`);
     return undefined;
   }
   // The wallet appends routes to these (`${allocatorUrl}/health`), which a query or fragment would break.
-  if (url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') {
+  if (
+    url.username !== "" ||
+    url.password !== "" ||
+    url.search !== "" ||
+    url.hash !== ""
+  ) {
     errors.push(`${name} must not carry credentials, a query or a fragment`);
     return undefined;
   }
   // The wallet's form exactly (schema.ts baseUrl): lowercase host, no default port, no trailing slash.
-  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
 }
 
 /**
@@ -119,103 +138,210 @@ function readUrl(section, label, field, allowLocalHttp, errors) {
  * `config` is null exactly when the wallet would ignore the document.
  */
 export function parseBridgeConfigDetailed(body, network, options = {}) {
-  const allowLocalHttp = options.allowLocalHttp === true;
   const errors = [];
   const dropped = [];
-  if (!isRecord(body)) return { config: null, errors: ['the document must be a JSON object'], dropped };
-
-  if (typeof body.network !== 'string' || body.network !== network) {
-    errors.push(`network must be "${network}"`);
+  if (!isRecord(body))
+    return {
+      config: null,
+      errors: ["the document must be an object"],
+      dropped,
+    };
+  if (body.network !== network) errors.push(`network must be "${network}"`);
+  if (!Number.isSafeInteger(body.version) || body.version < 1)
+    errors.push("version must be a positive safe integer");
+  const featuresIn = readSection(body, "features", errors);
+  const featureNames = ["earn", "fastBridge", "bridgeIn", "bridgeOut"];
+  for (const name of featureNames) {
+    if (featuresIn[name] !== undefined && typeof featuresIn[name] !== "boolean")
+      errors.push(`features.${name} must be boolean`);
   }
-  const version = body.version;
-  if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) {
-    errors.push('version must be a positive safe integer');
-  }
-
-  const evmIn = readSection(body, 'evm', errors);
-  const agglayerIn = readSection(body, 'agglayer', errors);
-  const epochIn = readSection(body, 'epoch', errors);
-  const featuresIn = readSection(body, 'features', errors);
-
-  const evm = {};
-  if (evmIn.chainId !== undefined) {
-    const chainId = evmIn.chainId;
-    if (typeof chainId !== 'number' || !Number.isSafeInteger(chainId) || chainId < 1) {
-      errors.push('evm.chainId must be a positive safe integer');
-    } else if (SUPPORTED_EVM_CHAIN_IDS.includes(chainId)) {
-      evm.chainId = chainId;
-    } else {
-      dropped.push(`evm.chainId ${chainId} is not a chain the wallet supports (${SUPPORTED_EVM_CHAIN_IDS.join(', ')})`);
+  const providers = readSection(body, "bridge-providers", errors);
+  const chains = readSection(body, "supportedEvmChains", errors);
+  const required = (object, key, label, pattern) => {
+    if (typeof object[key] !== "string" || !pattern.test(object[key]))
+      errors.push(`${label}.${key} is missing or invalid`);
+  };
+  const url = (object, key, label) => {
+    if (object[key] === undefined) errors.push(`${label}.${key} is required`);
+    readUrl(object, label, key, options.allowLocalHttp === true, errors);
+  };
+  for (const [name, provider] of Object.entries(providers)) {
+    if (!isRecord(provider)) {
+      errors.push(`bridge-providers.${name} must be an object`);
+      continue;
+    }
+    switch (name) {
+      case "epoch":
+        url(provider, "allocatorUrl", name);
+        url(provider, "positionsUrl", name);
+        if (provider.outputs !== undefined && !isRecord(provider.outputs))
+          errors.push("epoch.outputs must be an object");
+        for (const [key, output] of Object.entries(
+          isRecord(provider.outputs) ? provider.outputs : {},
+        )) {
+          if (network !== "testnet" || key !== "usdc-testnet-output")
+            errors.push(
+              `epoch.outputs.${key} is not a supported output on this network`,
+            );
+          if (!isRecord(output))
+            errors.push(`epoch.outputs.${key} must be an object`);
+          else
+            required(
+              output,
+              "faucetId",
+              `epoch.outputs.${key}`,
+              MIDEN_ACCOUNT_ID,
+            );
+        }
+        break;
+      case "agglayer":
+        url(provider, "indexerUrl", name);
+        break;
+      case "usdcx":
+        if (
+          !Number.isInteger(provider.midenDomain) ||
+          provider.midenDomain < 0 ||
+          provider.midenDomain > 0xffffffff
+        )
+          errors.push("usdcx.midenDomain must be uint32");
+        url(provider, "attestationUrl", name);
+        url(provider, "irisUrl", name);
+        break;
     }
   }
-
-  const agglayer = {
-    l1Bridge: readPattern(agglayerIn, 'agglayer', 'l1Bridge', EVM_ADDRESS, 'a 20-byte 0x address', errors),
-    midenBridge: readPattern(
-      agglayerIn,
-      'agglayer',
-      'midenBridge',
-      MIDEN_ACCOUNT_ID,
-      'a 15-byte 0x account id',
-      errors
-    ),
-    indexerUrl: readUrl(agglayerIn, 'agglayer', 'indexerUrl', allowLocalHttp, errors)
-  };
-
-  const epoch = {
-    allocatorUrl: readUrl(epochIn, 'epoch', 'allocatorUrl', allowLocalHttp, errors),
-    positionsUrl: readUrl(epochIn, 'epoch', 'positionsUrl', allowLocalHttp, errors),
-    midenUsdcFaucet: readPattern(
-      epochIn,
-      'epoch',
-      'midenUsdcFaucet',
-      MIDEN_ACCOUNT_ID,
-      'a 15-byte 0x account id',
-      errors
-    ),
-    evmUsdc: readPattern(epochIn, 'epoch', 'evmUsdc', EVM_ADDRESS, 'a 20-byte 0x address', errors),
-    earnProtocol: undefined
-  };
-  if (epochIn.earnProtocol !== undefined) {
-    if (typeof epochIn.earnProtocol !== 'string') {
-      errors.push('epoch.earnProtocol must be a string');
-    } else if (SUPPORTED_EARN_PROTOCOLS.includes(epochIn.earnProtocol)) {
-      epoch.earnProtocol = epochIn.earnProtocol;
-    } else {
-      dropped.push(`epoch.earnProtocol "${epochIn.earnProtocol}" is not one the wallet supports`);
+  const seenIds = new Set();
+  for (const [name, chain] of Object.entries(chains)) {
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) || !isRecord(chain)) {
+      errors.push(`invalid chain ${name}`);
+      continue;
+    }
+    if (CHAIN_IDS[name] !== chain.chainId)
+      errors.push(`${name}.chainId does not match the wallet registry`);
+    if (seenIds.has(chain.chainId))
+      errors.push(`duplicate chain id ${chain.chainId}`);
+    seenIds.add(chain.chainId);
+    if (!isRecord(chain.bridges)) {
+      errors.push(`${name}.bridges must be an object`);
+      continue;
+    }
+    for (const [kind, bridge] of Object.entries(chain.bridges)) {
+      const label = `${name}.bridges.${kind}`;
+      if (!isRecord(bridge)) {
+        errors.push(`${label} must be an object`);
+        continue;
+      }
+      if (!isRecord(providers[kind]))
+        errors.push(`${label} requires bridge-providers.${kind}`);
+      for (const direction of ["depositEnabled", "withdrawalEnabled"])
+        if (typeof bridge[direction] !== "boolean")
+          errors.push(`${label}.${direction} must be boolean`);
+      switch (kind) {
+        case "epoch":
+        case "usdcx": {
+          const token = bridge.tokens?.USDC;
+          if (!isRecord(token)) {
+            errors.push(`${label}.tokens.USDC is required`);
+            break;
+          }
+          required(token, "contractAddress", label, EVM_ADDRESS);
+          if (kind === "epoch") {
+            if (
+              token.outputs !== undefined &&
+              (!Array.isArray(token.outputs) ||
+                new Set(token.outputs).size !== token.outputs.length ||
+                token.outputs.some(
+                  (key) =>
+                    typeof key !== "string" ||
+                    !isRecord(providers.epoch?.outputs?.[key]),
+                ))
+            )
+              errors.push(`${label} has an invalid output reference`);
+            break;
+          }
+          if (
+            !Number.isInteger(bridge.domain) ||
+            bridge.domain < 0 ||
+            bridge.domain > 0xffffffff
+          )
+            errors.push(`${label}.domain must be uint32`);
+          if (bridge.executor !== undefined) {
+            if (!isRecord(bridge.executor))
+              errors.push(`${label}.executor must be an object`);
+            else
+              for (const field of ["address", "handler"])
+                required(bridge.executor, field, label, EVM_ADDRESS);
+          }
+          const deposit = bridge.deposit;
+          if (bridge.depositEnabled && deposit === undefined)
+            errors.push(`${label}.deposit is required while enabled`);
+          if (deposit === undefined) break;
+          if (!isRecord(deposit)) {
+            errors.push(`${label}.deposit must be an object`);
+            break;
+          }
+          switch (deposit.route) {
+            case "xreserve":
+              required(deposit, "xReserve", label, EVM_ADDRESS);
+              break;
+            case "executor": {
+              for (const field of ["tokenMessenger", "tokenMessengerWithFees"])
+                required(deposit, field, label, EVM_ADDRESS);
+              const target = chains[deposit.executorChain]?.bridges?.usdcx;
+              if (!target?.executor || target.deposit?.route !== "xreserve")
+                errors.push(
+                  `${label}.executorChain must name an xreserve chain with an executor`,
+                );
+              break;
+            }
+            default:
+              errors.push(`${label}.deposit.route is invalid`);
+          }
+          if (bridge.executor && deposit.route !== "xreserve")
+            errors.push(`${label}.executor requires xreserve`);
+          break;
+        }
+        case "agglayer":
+          required(bridge, "contractAddress", label, EVM_ADDRESS);
+          required(bridge, "midenBridgeId", label, MIDEN_ACCOUNT_ID);
+          break;
+        default:
+          errors.push(`${label} is not a supported bridge`);
+      }
     }
   }
-
-  const features = {};
-  for (const name of BRIDGE_SWITCHES) {
-    const value = featuresIn[name];
-    if (value === undefined) features[name] = false;
-    else if (typeof value === 'boolean') features[name] = value;
-    else errors.push(`features.${name} must be true or false`);
-  }
-
-  const swapIn = readSection(body, 'swap', errors);
+  if (featuresIn.earn && !providers.epoch)
+    errors.push("Earn requires the Epoch provider");
+  const swapIn = readSection(body, "swap", errors);
   const swap = {
     tokens: readSwapTokens(swapIn.tokens, errors, dropped),
-    etaUrl: readUrl(swapIn, 'swap', 'etaUrl', allowLocalHttp, errors)
+    etaUrl: readUrl(
+      swapIn,
+      "swap",
+      "etaUrl",
+      options.allowLocalHttp === true,
+      errors,
+    ),
   };
-
-  const mainnetCountdown = readCountdown(body.mainnetCountdown);
-
-  // The wallet's onboarding read (schema.ts): absent means the wallet's own default, a wrong type
-  // rejects the document.
-  const onboardingIn = readSection(body, 'onboarding', errors);
-  const onboarding = {};
-  if (onboardingIn.inviteOnly !== undefined) {
-    if (typeof onboardingIn.inviteOnly === 'boolean') onboarding.inviteOnly = onboardingIn.inviteOnly;
-    else errors.push('onboarding.inviteOnly must be true or false');
-  }
-
-  if (errors.length > 0) return { config: null, errors, dropped };
+  const onboarding = readSection(body, "onboarding", errors);
+  if (
+    onboarding.inviteOnly !== undefined &&
+    typeof onboarding.inviteOnly !== "boolean"
+  )
+    errors.push("onboarding.inviteOnly must be boolean");
   return {
-    config: { network, version, evm, agglayer, epoch, features, swap, mainnetCountdown, onboarding },
+    config: errors.length
+      ? null
+      : {
+          ...body,
+          features: { ...featuresIn, earn: featuresIn.earn === true },
+          "bridge-providers": providers,
+          supportedEvmChains: chains,
+          swap,
+          mainnetCountdown: readCountdown(body.mainnetCountdown),
+          onboarding,
+        },
     errors,
-    dropped
+    dropped,
   };
 }
 
@@ -227,7 +353,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
 function readSwapTokens(value, errors, dropped) {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
-    errors.push('swap.tokens must be an array');
+    errors.push("swap.tokens must be an array");
     return [];
   }
   const tokens = [];
@@ -238,24 +364,48 @@ function readSwapTokens(value, errors, dropped) {
       return;
     }
     const { symbol, decimals } = entry;
-    if (typeof symbol !== 'string' || !TOKEN_SYMBOL.test(symbol)) {
+    if (typeof symbol !== "string" || !TOKEN_SYMBOL.test(symbol)) {
       errors.push(`${label}.symbol must be 1 to 6 upper-case letters`);
     }
-    const faucetId = readPattern(entry, label, 'faucetId', MIDEN_ACCOUNT_ID, 'a 15-byte 0x account id', errors);
-    if (faucetId === undefined && entry.faucetId === undefined) errors.push(`${label}.faucetId is required`);
-    if (!Number.isSafeInteger(decimals) || decimals < 0 || decimals > MAX_SWAP_TOKEN_DECIMALS) {
-      errors.push(`${label}.decimals must be an integer from 0 to ${MAX_SWAP_TOKEN_DECIMALS}`);
+    const faucetId = readPattern(
+      entry,
+      label,
+      "faucetId",
+      MIDEN_ACCOUNT_ID,
+      "a 15-byte 0x account id",
+      errors,
+    );
+    if (faucetId === undefined && entry.faucetId === undefined)
+      errors.push(`${label}.faucetId is required`);
+    if (
+      !Number.isSafeInteger(decimals) ||
+      decimals < 0 ||
+      decimals > MAX_SWAP_TOKEN_DECIMALS
+    ) {
+      errors.push(
+        `${label}.decimals must be an integer from 0 to ${MAX_SWAP_TOKEN_DECIMALS}`,
+      );
     }
     const token = { symbol, faucetId, decimals };
     if (entry.logo !== undefined) {
-      if (typeof entry.logo !== 'string') errors.push(`${label}.logo must be a string`);
-      else if (SUPPORTED_SWAP_TOKEN_LOGOS.includes(entry.logo)) token.logo = entry.logo;
-      else dropped.push(`${label}.logo "${entry.logo}" is not a mark the wallet ships`);
+      if (typeof entry.logo !== "string")
+        errors.push(`${label}.logo must be a string`);
+      else if (SUPPORTED_SWAP_TOKEN_LOGOS.includes(entry.logo))
+        token.logo = entry.logo;
+      else
+        dropped.push(
+          `${label}.logo "${entry.logo}" is not a mark the wallet ships`,
+        );
     }
     if (entry.priceSymbol !== undefined) {
-      if (typeof entry.priceSymbol !== 'string') errors.push(`${label}.priceSymbol must be a string`);
-      else if (SUPPORTED_PRICE_SYMBOLS.includes(entry.priceSymbol)) token.priceSymbol = entry.priceSymbol;
-      else dropped.push(`${label}.priceSymbol "${entry.priceSymbol}" is not an asset the wallet's price feed quotes`);
+      if (typeof entry.priceSymbol !== "string")
+        errors.push(`${label}.priceSymbol must be a string`);
+      else if (SUPPORTED_PRICE_SYMBOLS.includes(entry.priceSymbol))
+        token.priceSymbol = entry.priceSymbol;
+      else
+        dropped.push(
+          `${label}.priceSymbol "${entry.priceSymbol}" is not an asset the wallet's price feed quotes`,
+        );
     }
     tokens.push(token);
   });
@@ -265,7 +415,7 @@ function readSwapTokens(value, errors, dropped) {
     if (token.faucetId !== undefined && faucetIds.has(token.faucetId)) {
       errors.push(`swap.tokens names faucet ${token.faucetId} twice`);
     }
-    if (typeof token.symbol === 'string' && symbols.has(token.symbol)) {
+    if (typeof token.symbol === "string" && symbols.has(token.symbol)) {
       errors.push(`swap.tokens names symbol ${token.symbol} twice`);
     }
     faucetIds.add(token.faucetId);
@@ -282,10 +432,12 @@ export function swapErrors(config) {
   const errors = [];
   const count = config.swap.tokens.length;
   if (count > 0 && count < MIN_SWAP_TOKENS) {
-    errors.push(`swap.tokens must name at least ${MIN_SWAP_TOKENS} tokens, or none`);
+    errors.push(
+      `swap.tokens must name at least ${MIN_SWAP_TOKENS} tokens, or none`,
+    );
   }
   if (count > 0 && config.swap.etaUrl === undefined) {
-    errors.push('swap.tokens is set but swap.etaUrl is missing');
+    errors.push("swap.tokens is set but swap.etaUrl is missing");
   }
   return errors;
 }
@@ -294,54 +446,34 @@ export function parseBridgeConfig(body, network, options) {
   return parseBridgeConfigDetailed(body, network, options).config;
 }
 
-/** What a switched-on feature needs from the document; a switch on without them is a mistake. */
-export const FEATURE_REQUIREMENTS = {
-  earn: [
-    'evm.chainId',
-    'epoch.allocatorUrl',
-    'epoch.positionsUrl',
-    'epoch.midenUsdcFaucet',
-    'epoch.evmUsdc',
-    'epoch.earnProtocol'
-  ],
-  fastBridge: ['evm.chainId', 'epoch.allocatorUrl', 'epoch.midenUsdcFaucet', 'epoch.evmUsdc'],
-  bridgeIn: ['evm.chainId', 'agglayer.l1Bridge', 'agglayer.midenBridge', 'agglayer.indexerUrl'],
-  // The L1 bridge gives the destination network id; the indexer is what Claim polls afterwards.
-  bridgeOut: ['evm.chainId', 'agglayer.l1Bridge', 'agglayer.midenBridge', 'agglayer.indexerUrl']
-};
-
-const valueAt = (config, dotted) => {
-  const [section, field] = dotted.split('.');
-  return config[section][field];
-};
-
-export function switchErrors(config) {
-  const errors = [];
-  for (const name of BRIDGE_SWITCHES) {
-    if (!config.features[name]) continue;
-    for (const field of FEATURE_REQUIREMENTS[name]) {
-      if (valueAt(config, field) === undefined) {
-        errors.push(`features.${name} is on but ${field} is missing or unsupported`);
-      }
-    }
-  }
-  return errors;
+export function switchErrors() {
+  return [];
 }
 
 /** The wallet safely ignores a bad banner; publishing one is still a configuration mistake. */
 export function countdownErrors(body) {
   const countdown = body.mainnetCountdown;
   if (countdown === undefined) return [];
-  if (!isRecord(countdown)) return ['mainnetCountdown must be an object'];
+  if (!isRecord(countdown)) return ["mainnetCountdown must be an object"];
   const errors = [];
-  if (countdown.enabled !== undefined && typeof countdown.enabled !== 'boolean') {
-    errors.push('mainnetCountdown.enabled must be true or false');
+  if (
+    countdown.enabled !== undefined &&
+    typeof countdown.enabled !== "boolean"
+  ) {
+    errors.push("mainnetCountdown.enabled must be true or false");
   }
-  if (countdown.launchAt !== undefined && utcTimestamp(countdown.launchAt) === undefined) {
-    errors.push('mainnetCountdown.launchAt must be an RFC 3339 UTC timestamp such as 2026-10-26T00:00:00Z');
+  if (
+    countdown.launchAt !== undefined &&
+    utcTimestamp(countdown.launchAt) === undefined
+  ) {
+    errors.push(
+      "mainnetCountdown.launchAt must be an RFC 3339 UTC timestamp such as 2026-10-26T00:00:00Z",
+    );
   }
   if (countdown.enabled === true && countdown.launchAt === undefined) {
-    errors.push('mainnetCountdown.enabled is on but mainnetCountdown.launchAt is missing');
+    errors.push(
+      "mainnetCountdown.enabled is on but mainnetCountdown.launchAt is missing",
+    );
   }
   return errors;
 }
@@ -366,65 +498,132 @@ export function versionError(currentText, currentVersion, baseText) {
 /** The checks the switched-on features need, one per distinct target. */
 export function plannedChecks(config) {
   const checks = new Map();
-  const add = check => checks.set(check.key, check);
-  const { evm, agglayer, epoch, features } = config;
-  const epochOn = features.earn || features.fastBridge;
-  const agglayerOn = features.bridgeIn || features.bridgeOut;
-
-  if (epochOn || agglayerOn) add({ key: 'evm-chain', kind: 'evm-chain', label: 'EVM RPC', chainId: evm.chainId });
-  if (epochOn) {
+  const add = (check) => checks.set(check.key, check);
+  const providers = config["bridge-providers"];
+  const code = (chainId, address, label) =>
     add({
-      key: 'allocator',
-      kind: 'http',
-      label: 'Epoch allocator',
-      url: `${epoch.allocatorUrl}/health`,
-      healthy: body => body?.status === 'healthy'
+      key: `code:${chainId}:${address}`,
+      kind: "evm-code",
+      chainId,
+      address,
+      label,
     });
-    add({ key: `code:${epoch.evmUsdc}`, kind: 'evm-code', label: 'EVM USDC', address: epoch.evmUsdc });
-    add({
-      key: 'evm-usdc-decimals',
-      kind: 'evm-uint',
-      label: 'EVM USDC decimals()',
-      address: epoch.evmUsdc,
-      data: '0x313ce567'
-    });
+  const service = (key, url, healthy) =>
+    add({ key, kind: "http", url, healthy });
+  for (const [name, chain] of Object.entries(config.supportedEvmChains)) {
+    for (const [kind, bridge] of Object.entries(chain.bridges)) {
+      if (!bridge.depositEnabled && !bridge.withdrawalEnabled) continue;
+      add({
+        key: `chain:${chain.chainId}`,
+        kind: "evm-chain",
+        chainId: chain.chainId,
+      });
+      switch (kind) {
+        case "epoch":
+          service(
+            "allocator",
+            `${providers.epoch.allocatorUrl}/health`,
+            (body) => body?.status === "healthy",
+          );
+          code(
+            chain.chainId,
+            bridge.tokens.USDC.contractAddress,
+            `${name} Epoch USDC`,
+          );
+          add({
+            key: `decimals:${chain.chainId}:${bridge.tokens.USDC.contractAddress}`,
+            kind: "evm-uint",
+            chainId: chain.chainId,
+            address: bridge.tokens.USDC.contractAddress,
+            data: "0x313ce567",
+            label: `${name} Epoch USDC decimals()`,
+          });
+          break;
+        case "agglayer":
+          service(
+            "indexer",
+            `${providers.agglayer.indexerUrl}/healthz`,
+            (body) => body?.status === "SERVING",
+          );
+          code(chain.chainId, bridge.contractAddress, `${name} Agglayer`);
+          add({
+            key: `network:${chain.chainId}:${bridge.contractAddress}`,
+            kind: "evm-uint",
+            chainId: chain.chainId,
+            address: bridge.contractAddress,
+            data: "0xbab161bf",
+            label: `${name} Agglayer networkID()`,
+          });
+          break;
+        case "usdcx": {
+          code(
+            chain.chainId,
+            bridge.tokens.USDC.contractAddress,
+            `${name} USDCx USDC`,
+          );
+          if (!bridge.depositEnabled) break;
+          const deposit = bridge.deposit;
+          switch (deposit.route) {
+            case "xreserve":
+              code(chain.chainId, deposit.xReserve, `${name} xReserve`);
+              break;
+            case "executor": {
+              code(
+                chain.chainId,
+                deposit.tokenMessenger,
+                `${name} TokenMessenger`,
+              );
+              code(
+                chain.chainId,
+                deposit.tokenMessengerWithFees,
+                `${name} TokenMessenger with fees`,
+              );
+              const target = config.supportedEvmChains[deposit.executorChain];
+              const route = target.bridges.usdcx;
+              add({
+                key: `chain:${target.chainId}`,
+                kind: "evm-chain",
+                chainId: target.chainId,
+              });
+              code(target.chainId, route.deposit.xReserve, "executor xReserve");
+              code(target.chainId, route.executor.address, "executor");
+              code(target.chainId, route.executor.handler, "executor handler");
+              break;
+            }
+          }
+          break;
+        }
+      }
+    }
   }
-  if (features.earn) {
-    add({
-      key: 'positions',
-      kind: 'http',
-      label: 'Epoch positions',
-      url: `${epoch.positionsUrl}/health`,
-      healthy: body => body?.ok === true
-    });
-  }
-  if (agglayerOn) {
-    add({ key: `code:${agglayer.l1Bridge}`, kind: 'evm-code', label: 'L1 bridge', address: agglayer.l1Bridge });
-    add({
-      key: 'l1-network-id',
-      kind: 'evm-uint',
-      label: 'L1 bridge networkID()',
-      address: agglayer.l1Bridge,
-      data: '0xbab161bf'
-    });
-    add({
-      key: 'indexer',
-      kind: 'http',
-      label: 'Agglayer indexer',
-      url: `${agglayer.indexerUrl}/healthz`,
-      healthy: body => body?.status === 'SERVING'
-    });
+  if (config.features.earn) {
+    service(
+      "allocator",
+      `${providers.epoch.allocatorUrl}/health`,
+      (body) => body?.status === "healthy",
+    );
+    service(
+      "positions",
+      `${providers.epoch.positionsUrl}/health`,
+      (body) => body?.ok === true,
+    );
   }
   return [...checks.values()];
 }
 
 async function fetchWithTimeout(fetchImpl, url, init = {}) {
-  return fetchImpl(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  return fetchImpl(url, {
+    ...init,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
 }
 
 async function httpHealth(check, fetchImpl) {
-  const res = await fetchWithTimeout(fetchImpl, check.url, { headers: { accept: 'application/json' } });
-  if (res.status !== 200) return { ok: false, detail: `${check.url} answered HTTP ${res.status}` };
+  const res = await fetchWithTimeout(fetchImpl, check.url, {
+    headers: { accept: "application/json" },
+  });
+  if (res.status !== 200)
+    return { ok: false, detail: `${check.url} answered HTTP ${res.status}` };
   let body;
   try {
     body = await res.json();
@@ -433,7 +632,10 @@ async function httpHealth(check, fetchImpl) {
   }
   return check.healthy(body)
     ? { ok: true, detail: `${check.url} healthy` }
-    : { ok: false, detail: `${check.url} answered ${JSON.stringify(body).slice(0, 160)}` };
+    : {
+        ok: false,
+        detail: `${check.url} answered ${JSON.stringify(body).slice(0, 160)}`,
+      };
 }
 
 /** JSON-RPC against each of the chain's RPCs in turn; the first answer wins. */
@@ -442,42 +644,62 @@ export async function evmRpc(chainId, method, params, fetchImpl) {
   for (const url of EVM_RPCS[chainId] ?? []) {
     try {
       const res = await fetchWithTimeout(fetchImpl, url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
       });
       const body = await res.json();
-      if (isRecord(body) && typeof body.result === 'string') return body.result;
-      failures.push(`${url}: ${JSON.stringify(body?.error ?? body).slice(0, 120)}`);
+      if (isRecord(body) && typeof body.result === "string") return body.result;
+      failures.push(
+        `${url}: ${JSON.stringify(body?.error ?? body).slice(0, 120)}`,
+      );
     } catch (error) {
       failures.push(`${url}: ${error.message}`);
     }
   }
-  throw new Error(`no RPC for chain ${chainId} answered ${method}: ${failures.join('; ')}`);
+  throw new Error(
+    `no RPC for chain ${chainId} answered ${method}: ${failures.join("; ")}`,
+  );
 }
 
 async function runCheck(check, config, fetchImpl) {
   switch (check.kind) {
-    case 'http':
+    case "http":
       return httpHealth(check, fetchImpl);
-    case 'evm-chain': {
-      const answered = Number(await evmRpc(check.chainId, 'eth_chainId', [], fetchImpl));
+    case "evm-chain": {
+      const answered = Number(
+        await evmRpc(check.chainId, "eth_chainId", [], fetchImpl),
+      );
       return answered === check.chainId
         ? { ok: true, detail: `RPC answers chain ${answered}` }
-        : { ok: false, detail: `RPC answers chain ${answered}, expected ${check.chainId}` };
+        : {
+            ok: false,
+            detail: `RPC answers chain ${answered}, expected ${check.chainId}`,
+          };
     }
-    case 'evm-code': {
-      const code = await evmRpc(config.evm.chainId, 'eth_getCode', [check.address, 'latest'], fetchImpl);
+    case "evm-code": {
+      const code = await evmRpc(
+        check.chainId,
+        "eth_getCode",
+        [check.address, "latest"],
+        fetchImpl,
+      );
       return code.length > 2
-        ? { ok: true, detail: `${check.address} has ${(code.length - 2) / 2} bytes of code` }
-        : { ok: false, detail: `${check.address} has no code on chain ${config.evm.chainId}` };
+        ? {
+            ok: true,
+            detail: `${check.address} has ${(code.length - 2) / 2} bytes of code`,
+          }
+        : {
+            ok: false,
+            detail: `${check.address} has no code on chain ${config.evm.chainId}`,
+          };
     }
-    case 'evm-uint': {
+    case "evm-uint": {
       const result = await evmRpc(
-        config.evm.chainId,
-        'eth_call',
-        [{ to: check.address, data: check.data }, 'latest'],
-        fetchImpl
+        check.chainId,
+        "eth_call",
+        [{ to: check.address, data: check.data }, "latest"],
+        fetchImpl,
       );
       return /^0x[0-9a-fA-F]{64}$/.test(result)
         ? { ok: true, detail: `answers ${BigInt(result)}` }
@@ -492,23 +714,95 @@ export async function smokeTest(config, fetchImpl = fetch) {
   const results = [];
   for (const check of plannedChecks(config)) {
     try {
-      results.push({ label: check.label ?? check.key, ...(await runCheck(check, config, fetchImpl)) });
+      results.push({
+        label: check.label ?? check.key,
+        ...(await runCheck(check, config, fetchImpl)),
+      });
     } catch (error) {
-      results.push({ label: check.label ?? check.key, ok: false, detail: error.message });
+      results.push({
+        label: check.label ?? check.key,
+        ok: false,
+        detail: error.message,
+      });
     }
   }
   return results;
 }
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export function duplicateKeys(text, target) {
+  const duplicates = [];
+  let at = 0;
+  const skipSpace = () => {
+    while (at < text.length && " \t\n\r".includes(text[at])) at++;
+  };
+  const readString = () => {
+    const start = at++;
+    while (text[at] !== '"') at += text[at] === "\\" ? 2 : 1;
+    at++;
+    return JSON.parse(text.slice(start, at));
+  };
+  // An array index is a number in the path, so it never equals a key of `target`.
+  const readValue = (path) => {
+    skipSpace();
+    switch (text[at]) {
+      case "{": {
+        const watched =
+          path.length === target.length &&
+          path.every((key, index) => key === target[index]);
+        const seen = new Set();
+        at++;
+        skipSpace();
+        while (text[at] !== "}") {
+          const key = readString();
+          if (watched && seen.has(key) && !duplicates.includes(key))
+            duplicates.push(key);
+          seen.add(key);
+          skipSpace();
+          at++; // the colon
+          readValue([...path, key]);
+          skipSpace();
+          if (text[at] === ",") at++;
+          skipSpace();
+        }
+        at++;
+        return;
+      }
+      case "[": {
+        at++;
+        skipSpace();
+        for (let index = 0; text[at] !== "]"; index++) {
+          readValue([...path, index]);
+          skipSpace();
+          if (text[at] === ",") at++;
+          skipSpace();
+        }
+        at++;
+        return;
+      }
+      case '"':
+        readString();
+        return;
+      default:
+        // A number, true, false or null.
+        while (at < text.length && !",]} \t\n\r".includes(text[at])) at++;
+    }
+  };
+  readValue([]);
+  return duplicates;
+}
+
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 
 function baseText(baseRef, file, root) {
   if (!baseRef) return null;
   try {
-    return execFileSync('git', ['show', `${baseRef}:${file}`], {
+    return execFileSync("git", ["show", `${baseRef}:${file}`], {
       cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
     return null; // a new file has no base
@@ -516,11 +810,14 @@ function baseText(baseRef, file, root) {
 }
 
 /** `file` is relative to `root`, the way `git show <ref>:<file>` names it. */
-export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fetchImpl = fetch }) {
+export async function validateFile(
+  file,
+  { baseRef, smoke, root = REPO_ROOT, fetchImpl = fetch },
+) {
   const errors = [];
   const notes = [];
-  const network = path.basename(file, '.json');
-  const text = readFileSync(path.join(root, file), 'utf8');
+  const network = path.basename(file, ".json");
+  const text = readFileSync(path.join(root, file), "utf8");
   let body;
   try {
     body = JSON.parse(text);
@@ -529,10 +826,21 @@ export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fet
   }
   const parsed = parseBridgeConfigDetailed(body, network);
   errors.push(...parsed.errors);
-  notes.push(...parsed.dropped.map(reason => `dropped: ${reason}`));
+  notes.push(...parsed.dropped.map((reason) => `dropped: ${reason}`));
   if (parsed.config === null) return { errors, notes };
-  errors.push(...switchErrors(parsed.config), ...swapErrors(parsed.config), ...countdownErrors(body));
-  const bump = versionError(text, parsed.config.version, baseText(baseRef, file, root));
+  errors.push(
+    ...switchErrors(parsed.config),
+    ...swapErrors(parsed.config),
+    ...countdownErrors(body),
+    ...duplicateKeys(text, ["supportedEvmChains"]).map(
+      (key) => `supportedEvmChains repeats ${key}`,
+    ),
+  );
+  const bump = versionError(
+    text,
+    parsed.config.version,
+    baseText(baseRef, file, root),
+  );
   if (bump !== null) errors.push(bump);
   if (smoke && errors.length === 0) {
     for (const result of await smokeTest(parsed.config, fetchImpl)) {
@@ -544,32 +852,40 @@ export async function validateFile(file, { baseRef, smoke, root = REPO_ROOT, fet
 }
 
 async function main(argv) {
-  const smoke = !argv.includes('--no-smoke');
-  const named = argv.filter(arg => !arg.startsWith('--')).map(file => path.relative(REPO_ROOT, path.resolve(file)));
-  const files = named.length > 0 ? named : readdirSync(REPO_ROOT).filter(name => name.endsWith('.json'));
+  const smoke = !argv.includes("--no-smoke");
+  const named = argv
+    .filter((arg) => !arg.startsWith("--"))
+    .map((file) => path.relative(REPO_ROOT, path.resolve(file)));
+  const files =
+    named.length > 0
+      ? named
+      : readdirSync(REPO_ROOT).filter((name) => name.endsWith(".json"));
   if (files.length === 0) {
-    console.error('no <network>.json documents found');
+    console.error("no <network>.json documents found");
     return 1;
   }
   let failed = 0;
   for (const file of files) {
-    const { errors, notes } = await validateFile(file, { baseRef: process.env.BASE_REF, smoke });
+    const { errors, notes } = await validateFile(file, {
+      baseRef: process.env.BASE_REF,
+      smoke,
+    });
     console.log(`\n${file}`);
     for (const note of notes) console.log(`  · ${note}`);
     for (const error of errors) console.log(`  ✗ ${error}`);
     if (errors.length > 0) failed++;
-    else console.log('  ✓ valid');
+    else console.log("  ✓ valid");
   }
   return failed === 0 ? 0 : 1;
 }
 
-const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : '';
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (invokedPath === fileURLToPath(import.meta.url)) {
   main(process.argv.slice(2)).then(
-    code => process.exit(code),
-    error => {
+    (code) => process.exit(code),
+    (error) => {
       console.error(error);
       process.exit(1);
-    }
+    },
   );
 }
