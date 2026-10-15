@@ -1,0 +1,21 @@
+{
+  "network": "mainnet",
+  "version": 1,
+  "guardians": [
+    {
+      "id": "lambda-class",
+      "name": "LambdaClass",
+      "operatedBy": "LambdaClass",
+      "location": "US-EAST",
+      "endpoint": "https://guardian.cedar.internal.lambdaclass.com",
+      "about": "LambdaClass, an engineering firm that builds zero-knowledge systems.",
+      "kind": "Zero-knowledge systems engineering"
+    }
+  ],
+  "features": {
+    "earn": false,
+    "fastBridge": false,
+    "bridgeIn": false,
+    "bridgeOut": false
+  }
+}
