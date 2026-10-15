@@ -4,8 +4,8 @@ The wallet reads one network document from
 `https://raw.githubusercontent.com/0xMiden/wallet-config/main/<network>.json`.
 A changed document must have a higher `version`. The `network` must match the file name.
 
-This change configures testnet only. Devnet keeps its published disabled document.
-Mainnet configuration is deferred.
+Testnet is fully configured. Devnet keeps its published disabled document.
+Mainnet lists its Guardian operator; its bridges and Earn are off.
 
 ## Bridge configuration
 
