@@ -80,6 +80,54 @@ are `MIDEN`, `ETH`, `USDC`, and `BTC`. Optional `priceSymbol` values are `ETH`,
 boolean; when true, `launchAt` must be a valid UTC timestamp such as
 `2026-10-26T16:00:00Z`.
 
+## Guardian operators
+
+`guardians` is optional. It lists the Guardian operators of the network in
+picker order, and the first is the default operator. It has 1 to 16 entries.
+Absent means the wallet uses the list it ships with.
+
+| Field        | Meaning                                                                                                                                                                                                         |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`         | Unique in the list: 1 to 32 lower-case letters, digits and single hyphens. The wallet draws its bundled logo for `open-zeppelin`, `gateway`, `lambda-class` and `kodax`. `custom` and `no-guardian` are reserved. |
+| `name`       | The name the wallet shows (1 to 48 characters).                                                                                                                                                                 |
+| `operatedBy` | Who runs the operator (1 to 48 characters).                                                                                                                                                                     |
+| `location`   | The operator's region, as the wallet shows it (1 to 48 characters).                                                                                                                                             |
+| `endpoint`   | The Guardian base URL (`https:`), unique in the list. A trailing slash and a default port are dropped and the host is lower-cased.                                                                              |
+
+Two optional fields describe the operator in English. The wallet shows them as
+written, in every language:
+
+| Field   | Meaning                                                                                                     |
+| ------- | ----------------------------------------------------------------------------------------------------------- |
+| `about` | One sentence on who runs the operator (1 to 160 characters). Onboarding shows it under the operator's name. |
+| `kind`  | A short line on what kind of company runs it (1 to 64 characters). The Change provider sheet shows it.      |
+
+Without them, the wallet shows its own words for the four bundled ids and
+`operatedBy` for any other id.
+
+A text has no control character and no space at either end. Each entry needs
+the five fields `id`, `name`, `operatedBy`, `location` and `endpoint`.
+
+`guardians` replaces the list the wallet ships with; it does not add to it. The
+wallet uses the list in these places:
+
+- A new wallet chooses its operator from it.
+- A wallet recovered from its recovery phrase looks for its account at each
+  listed operator.
+- The wallet reads an account's recovered history from each listed operator.
+- When an account's stored operator and its on-chain Guardian key disagree, the
+  wallet asks each listed operator for its key, and it can move the account to
+  the listed operator that holds the on-chain key.
+
+An account keeps the operator it has. If you remove an operator from the list,
+the accounts that use it do not move and continue to work. They lose the name
+and logo of their operator, and the wallet no longer reads their recovered
+history from it by default. To remove every operator, do not omit `guardians`:
+the wallet then uses its own list. An empty list is refused. Older wallets
+ignore the field and keep their own list.
+
+A Guardian has no switch: list an operator only when its endpoint is live.
+
 ## Validation and publication
 
 Use Node 22:
@@ -94,6 +142,13 @@ The final command checks contracts on each enabled route's chain and shared
 service health. Executor deposits also check the target contracts when its new
 transfer switches are off. It does not check Miden faucets or Circle service
 responses. Check these values before publication.
+
+The final command also asks every listed Guardian for its key
+(`GET <endpoint>/pubkey?scheme=ecdsa`, the request the wallet makes). An
+operator that `main` does not list yet must answer. An operator already on
+`main` that does not answer gives a warning only. Two operators that serve one
+key fail. The command cannot tell who operates an endpoint: confirm that with
+the operator before publication.
 
 Stage a route with both direction switches false. Enable it after its contracts
 and services are ready. Keep route data while transfers can need recovery.

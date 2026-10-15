@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-/** Validate network documents, version changes, and enabled routes with Node 22. */
+/**
+ * Validate network documents, version changes, and enabled routes with Node 22, and ask every
+ * listed Guardian operator for its key.
+ */
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -26,12 +29,28 @@ export const SUPPORTED_PRICE_SYMBOLS = ["ETH", "BTC", "USDC"];
 export const MAX_SWAP_TOKEN_DECIMALS = 12;
 /** The swap form opens on the first two tokens, so a list needs at least two. */
 export const MIN_SWAP_TOKENS = 2;
+/** The wallet pings every listed Guardian operator on the picker, so the list is bounded. */
+export const MAX_GUARDIANS = 16;
+/** The longest operator id, and the longest name, operator or location the wallet shows. */
+export const MAX_GUARDIAN_ID_LENGTH = 32;
+export const MAX_GUARDIAN_LABEL_LENGTH = 48;
+/** The longest `about` sentence and `kind` line the wallet shows. */
+export const MAX_GUARDIAN_ABOUT_LENGTH = 160;
+export const MAX_GUARDIAN_KIND_LENGTH = 64;
+/** Ids the wallet gives its own entries: the developer's custom endpoint and the no-Guardian choice. */
+export const RESERVED_GUARDIAN_IDS = ["custom", "no-guardian"];
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 // A token symbol as the protocol's TokenSymbol allows it: 1 to 6 upper-case ASCII letters.
 const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
+// A Guardian operator id: lower-case letters and digits in groups joined by single hyphens.
+const GUARDIAN_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+// A Guardian's key commitment as `GET /pubkey` serves it: a 32-byte 0x word.
+const GUARDIAN_COMMITMENT = /^0x[0-9a-fA-F]{64}$/;
+// C0 controls, DEL and C1 controls: none belongs in a line of text the wallet shows.
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
 
 /** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
 export const EVM_RPCS = {
@@ -322,6 +341,11 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
       errors,
     ),
   };
+  const guardians = readGuardians(
+    body.guardians,
+    options.allowLocalHttp === true,
+    errors,
+  );
   const onboarding = readSection(body, "onboarding", errors);
   if (
     onboarding.inviteOnly !== undefined &&
@@ -339,10 +363,121 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           swap,
           mainnetCountdown: readCountdown(body.mainnetCountdown),
           onboarding,
+          ...(guardians === undefined ? {} : { guardians }),
         },
     errors,
     dropped,
   };
+}
+
+function readGuardianLabel(
+  entry,
+  label,
+  field,
+  errors,
+  maxLength = MAX_GUARDIAN_LABEL_LENGTH,
+) {
+  const value = entry[field];
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > maxLength ||
+    value !== value.trim() ||
+    CONTROL_CHARACTER.test(value)
+  ) {
+    errors.push(
+      `${label}.${field} must be 1 to ${maxLength} characters with no control character and no space at either end`,
+    );
+    return undefined;
+  }
+  return value;
+}
+
+// Optional English text the wallet shows as written; absent means the wallet's own words for the id.
+function readGuardianText(entry, label, field, maxLength, errors) {
+  if (entry[field] === undefined) return {};
+  const value = readGuardianLabel(entry, label, field, errors, maxLength);
+  return value === undefined ? {} : { [field]: value };
+}
+
+/**
+ * The wallet's Guardian operators (schema.ts readGuardians): the list the Guardian picker shows, in
+ * order, with the first as the default. A bad entry rejects the document. Absent means the wallet
+ * uses the list it ships with; an empty list is refused, because it would leave a new wallet with
+ * no operator to choose. An endpoint is kept in the wallet's form, so a trailing slash is dropped.
+ */
+function readGuardians(value, allowLocalHttp, errors) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    errors.push("guardians must be an array");
+    return undefined;
+  }
+  if (value.length === 0 || value.length > MAX_GUARDIANS) {
+    errors.push(
+      `guardians must name 1 to ${MAX_GUARDIANS} operators, or be omitted`,
+    );
+    return undefined;
+  }
+  const guardians = [];
+  value.forEach((entry, index) => {
+    const label = `guardians[${index}]`;
+    if (!isRecord(entry)) {
+      errors.push(`${label} must be an object`);
+      return;
+    }
+    const { id } = entry;
+    const idOk =
+      typeof id === "string" &&
+      id.length <= MAX_GUARDIAN_ID_LENGTH &&
+      GUARDIAN_ID.test(id);
+    if (!idOk) {
+      errors.push(
+        `${label}.id must be 1 to ${MAX_GUARDIAN_ID_LENGTH} lower-case letters, digits and single hyphens`,
+      );
+    } else if (RESERVED_GUARDIAN_IDS.includes(id)) {
+      errors.push(`${label}.id "${id}" is reserved by the wallet`);
+    }
+    const name = readGuardianLabel(entry, label, "name", errors);
+    const operatedBy = readGuardianLabel(entry, label, "operatedBy", errors);
+    const location = readGuardianLabel(entry, label, "location", errors);
+    const endpoint = readUrl(entry, label, "endpoint", allowLocalHttp, errors);
+    if (endpoint === undefined && entry.endpoint === undefined)
+      errors.push(`${label}.endpoint is required`);
+    guardians.push({
+      id,
+      name,
+      operatedBy,
+      location,
+      endpoint,
+      ...readGuardianText(
+        entry,
+        label,
+        "about",
+        MAX_GUARDIAN_ABOUT_LENGTH,
+        errors,
+      ),
+      ...readGuardianText(
+        entry,
+        label,
+        "kind",
+        MAX_GUARDIAN_KIND_LENGTH,
+        errors,
+      ),
+    });
+  });
+  const ids = new Set();
+  const endpoints = new Set();
+  for (const guardian of guardians) {
+    if (typeof guardian.id === "string" && ids.has(guardian.id)) {
+      errors.push(`guardians names id ${guardian.id} twice`);
+    }
+    if (guardian.endpoint !== undefined && endpoints.has(guardian.endpoint)) {
+      errors.push(`guardians names endpoint ${guardian.endpoint} twice`);
+    }
+    ids.add(guardian.id);
+    endpoints.add(guardian.endpoint);
+  }
+  return guardians;
 }
 
 /**
@@ -495,10 +630,24 @@ export function versionError(currentText, currentVersion, baseText) {
   return `version must be greater than ${baseVersion}, the base branch's version (a revert is a new, higher version)`;
 }
 
-/** The checks the switched-on features need, one per distinct target. */
-export function plannedChecks(config) {
+/**
+ * The checks the switched-on features need, one per distinct target, and one per Guardian operator:
+ * no switch covers the operators, so each one is asked every time. `publishedGuardians` is the
+ * endpoints the base branch's document lists. An outage of one of those must not block an
+ * unrelated publication, so its check is advisory; an endpoint the base does not list must answer.
+ */
+export function plannedChecks(config, { publishedGuardians = [] } = {}) {
   const checks = new Map();
   const add = (check) => checks.set(check.key, check);
+  for (const guardian of config.guardians ?? []) {
+    add({
+      key: `guardian:${guardian.endpoint}`,
+      kind: "guardian",
+      label: `Guardian ${guardian.id}`,
+      url: `${guardian.endpoint}/pubkey?scheme=ecdsa`,
+      advisory: publishedGuardians.includes(guardian.endpoint),
+    });
+  }
   const providers = config["bridge-providers"];
   const code = (chainId, address, label) =>
     add({
@@ -638,6 +787,33 @@ async function httpHealth(check, fetchImpl) {
       };
 }
 
+/** A Guardian answers `GET /pubkey` with its key commitment. The wallet reads the ECDSA key, so the check does too. */
+async function guardianPubkey(check, fetchImpl) {
+  const res = await fetchWithTimeout(fetchImpl, check.url, {
+    headers: { accept: "application/json" },
+  });
+  if (res.status !== 200)
+    return { ok: false, detail: `${check.url} answered HTTP ${res.status}` };
+  let body;
+  try {
+    body = await res.json();
+  } catch {
+    return { ok: false, detail: `${check.url} did not answer JSON` };
+  }
+  const commitment = isRecord(body) ? body.commitment : undefined;
+  if (typeof commitment !== "string" || !GUARDIAN_COMMITMENT.test(commitment))
+    return {
+      ok: false,
+      detail: `${check.url} answered ${JSON.stringify(body).slice(0, 160)}, not a key commitment`,
+    };
+  const key = commitment.toLowerCase();
+  return {
+    ok: true,
+    detail: `${check.url} serves commitment ${key}`,
+    commitment: key,
+  };
+}
+
 /** JSON-RPC against each of the chain's RPCs in turn; the first answer wins. */
 export async function evmRpc(chainId, method, params, fetchImpl) {
   const failures = [];
@@ -666,6 +842,8 @@ async function runCheck(check, config, fetchImpl) {
   switch (check.kind) {
     case "http":
       return httpHealth(check, fetchImpl);
+    case "guardian":
+      return guardianPubkey(check, fetchImpl);
     case "evm-chain": {
       const answered = Number(
         await evmRpc(check.chainId, "eth_chainId", [], fetchImpl),
@@ -710,23 +888,49 @@ async function runCheck(check, config, fetchImpl) {
   }
 }
 
-export async function smokeTest(config, fetchImpl = fetch) {
+export async function smokeTest(config, fetchImpl = fetch, options = {}) {
   const results = [];
-  for (const check of plannedChecks(config)) {
+  // The wallet names neither of two operators that serve one key, so a shared key is a mistake.
+  const commitments = new Map();
+  for (const check of plannedChecks(config, options)) {
+    const label = check.label ?? check.key;
+    const advisory = check.advisory === true;
     try {
-      results.push({
-        label: check.label ?? check.key,
-        ...(await runCheck(check, config, fetchImpl)),
-      });
+      const { commitment, ...result } = await runCheck(
+        check,
+        config,
+        fetchImpl,
+      );
+      const holder =
+        commitment === undefined ? undefined : commitments.get(commitment);
+      if (holder !== undefined) {
+        results.push({
+          label,
+          ok: false,
+          advisory: false,
+          detail: `serves the key commitment ${holder} serves`,
+        });
+        continue;
+      }
+      if (commitment !== undefined) commitments.set(commitment, label);
+      results.push({ label, advisory, ...result });
     } catch (error) {
-      results.push({
-        label: check.label ?? check.key,
-        ok: false,
-        detail: error.message,
-      });
+      results.push({ label, ok: false, advisory, detail: error.message });
     }
   }
   return results;
+}
+
+/** The Guardian endpoints the base branch's document lists, in the wallet's form; none when it has no usable list. */
+export function publishedGuardianEndpoints(baseText, network) {
+  if (baseText === null) return [];
+  try {
+    const guardians =
+      parseBridgeConfig(JSON.parse(baseText), network)?.guardians ?? [];
+    return guardians.map((guardian) => guardian.endpoint);
+  } catch {
+    return [];
+  }
 }
 
 export function duplicateKeys(text, target) {
@@ -836,15 +1040,17 @@ export async function validateFile(
       (key) => `supportedEvmChains repeats ${key}`,
     ),
   );
-  const bump = versionError(
-    text,
-    parsed.config.version,
-    baseText(baseRef, file, root),
-  );
+  const base = baseText(baseRef, file, root);
+  const bump = versionError(text, parsed.config.version, base);
   if (bump !== null) errors.push(bump);
   if (smoke && errors.length === 0) {
-    for (const result of await smokeTest(parsed.config, fetchImpl)) {
+    const publishedGuardians = publishedGuardianEndpoints(base, network);
+    for (const result of await smokeTest(parsed.config, fetchImpl, {
+      publishedGuardians,
+    })) {
       if (result.ok) notes.push(`ok: ${result.label}: ${result.detail}`);
+      else if (result.advisory)
+        notes.push(`warning: ${result.label}: ${result.detail}`);
       else errors.push(`${result.label}: ${result.detail}`);
     }
   }
