@@ -5,7 +5,8 @@ The wallet reads one network document from
 A changed document must have a higher `version`. The `network` must match the file name.
 
 Testnet is fully configured. Devnet keeps its published disabled document.
-Mainnet lists its Guardian operator; its bridges and Earn are off.
+Mainnet lists its Guardian operator and routes USDCx from Arc, Ethereum, Base, and
+Arbitrum. Its Earn, Epoch, and Agglayer features are off, and it has no swap tokens.
 
 ## Bridge configuration
 

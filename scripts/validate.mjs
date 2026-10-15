@@ -61,7 +61,7 @@ export const EVM_RPCS = {
   8453: ["https://mainnet.base.org"],
   42161: ["https://arb1.arbitrum.io/rpc"],
   10: ["https://mainnet.optimism.io"],
-  5042: ["https://rpc.arc.network"],
+  5042: ["https://rpc.mainnet.arc.io", "https://arc.drpc.org"],
   11155111: [
     "https://ethereum-sepolia-rpc.publicnode.com",
     "https://1rpc.io/sepolia",
