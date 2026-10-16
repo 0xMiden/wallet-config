@@ -527,18 +527,18 @@ test("refuses a document whose new Guardian operator is down and passes one whos
   }
 });
 
-test("chains stages all 20 destinations and preserves the four published routes", () => {
+test("chains stages 10 destinations and preserves the four published routes", () => {
   const body = structuredClone(source);
   const result = parseBridgeConfigDetailed(body, "testnet");
   assert.deepEqual(result.errors, []);
-  assert.equal(Object.keys(result.config.chains).length, 20);
-  assert.equal(Object.keys(result.config.supportedEvmChains).length, 19);
+  assert.equal(Object.keys(result.config.chains).length, 10);
+  assert.equal(Object.keys(result.config.supportedEvmChains).length, 9);
   const domains = Object.values(body.chains).map(
     (chain) => chain.bridges.usdcx.domain,
   );
   assert.deepEqual(
     domains.sort((a, b) => a - b),
-    [0, 1, 2, 3, 5, 6, 7, 10, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22, 26, 28],
+    [0, 1, 2, 3, 5, 6, 7, 15, 19, 26],
   );
   for (const [slug, chain] of Object.entries(body.chains)) {
     if (body.supportedEvmChains[slug]) {

@@ -4,7 +4,7 @@ The wallet reads one network document from
 `https://raw.githubusercontent.com/0xMiden/wallet-config/main/<network>.json`.
 A changed document must have a higher `version`. The `network` must match the file name.
 
-Testnet keeps its four active USDCx routes and stages 16 more destinations.
+Testnet keeps its four active USDCx routes and stages six more destinations.
 Devnet keeps its published disabled document.
 Mainnet lists its Guardian operator and routes USDCx from Arc, Ethereum, Base, and
 Arbitrum. Its Earn, Epoch, and Agglayer features are off, and it has no swap tokens.
@@ -59,7 +59,7 @@ and uses six decimals. The wallet must derive the recipient's USDC token account
 the bridge service must ensure that account exists before payout.
 
 Address validation belongs in wallet code. EVM recipients use 20-byte addresses;
-XDC may normalize an `xdc` prefix to `0x`. Solana recipients use Base58-encoded
+Solana recipients use Base58-encoded
 32-byte addresses. Do not add address regexes to the remote document.
 
 | Bridge     | Route fields                                                                              |
@@ -206,27 +206,13 @@ these networks; it does not enable new withdrawals in a released wallet.
 | avalanche-fuji | 43113 | 1 |
 | optimism-sepolia | 11155420 | 2 |
 | polygon-amoy | 80002 | 7 |
-| unichain-sepolia | 1301 | 10 |
-| linea-sepolia | 59141 | 11 |
-| codex-testnet | 812242 | 12 |
-| sonic-testnet | 14601 | 13 |
-| world-chain-sepolia | 4801 | 14 |
 | monad-testnet | 10143 | 15 |
-| sei-testnet | 1328 | 16 |
-| xdc-apothem | 51 | 18 |
 | hyperevm-testnet | 998 | 19 |
-| ink-sepolia | 763373 | 21 |
-| plume-testnet | 98867 | 22 |
-| edge-testnet | 33431 | 28 |
 | solana-devnet | devnet | 5 |
 
 Reference data checked on 2026-10-16:
 
 - [Circle domain IDs](https://developers.circle.com/cctp/concepts/supported-chains-and-domains)
 - [Circle native USDC addresses](https://developers.circle.com/stablecoins/usdc-contract-addresses)
-- [Chainlink network IDs, including EDGE and Plume testnets](https://docs.chain.link/resources/link-token-contracts)
-- [Viem chain definitions, including Codex Testnet](https://github.com/wevm/viem/tree/main/src/chains/definitions)
-- [Sonic network details](https://docs.soniclabs.com/sonic/build-on-sonic/getting-started)
-
-Use Sonic Testnet 14601 with USDC `0x0BA304580ee7c9a980CF72e55f5Ed2E9fd30Bc51`.
-Do not use the legacy Blaze network 57054 or the old Plume testnet 161221135.
+- [Chainlink network IDs](https://docs.chain.link/resources/link-token-contracts)
+- [Viem chain definitions](https://github.com/wevm/viem/tree/main/src/chains/definitions)

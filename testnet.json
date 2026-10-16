@@ -347,86 +347,6 @@
         }
       }
     },
-    "unichain-sepolia": {
-      "family": "evm",
-      "chainId": 1301,
-      "bridges": {
-        "usdcx": {
-          "domain": 10,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0x31d0220469e10c4E71834a79b1f276d740d3768F"
-            }
-          }
-        }
-      }
-    },
-    "linea-sepolia": {
-      "family": "evm",
-      "chainId": 59141,
-      "bridges": {
-        "usdcx": {
-          "domain": 11,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0xFEce4462D57bD51A6A552365A011b95f0E16d9B7"
-            }
-          }
-        }
-      }
-    },
-    "codex-testnet": {
-      "family": "evm",
-      "chainId": 812242,
-      "bridges": {
-        "usdcx": {
-          "domain": 12,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0x6d7f141b6819C2c9CC2f818e6ad549E7Ca090F8f"
-            }
-          }
-        }
-      }
-    },
-    "sonic-testnet": {
-      "family": "evm",
-      "chainId": 14601,
-      "bridges": {
-        "usdcx": {
-          "domain": 13,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0x0BA304580ee7c9a980CF72e55f5Ed2E9fd30Bc51"
-            }
-          }
-        }
-      }
-    },
-    "world-chain-sepolia": {
-      "family": "evm",
-      "chainId": 4801,
-      "bridges": {
-        "usdcx": {
-          "domain": 14,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88"
-            }
-          }
-        }
-      }
-    },
     "monad-testnet": {
       "family": "evm",
       "chainId": 10143,
@@ -443,38 +363,6 @@
         }
       }
     },
-    "sei-testnet": {
-      "family": "evm",
-      "chainId": 1328,
-      "bridges": {
-        "usdcx": {
-          "domain": 16,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0x4fCF1784B31630811181f670Aea7A7bEF803eaED"
-            }
-          }
-        }
-      }
-    },
-    "xdc-apothem": {
-      "family": "evm",
-      "chainId": 51,
-      "bridges": {
-        "usdcx": {
-          "domain": 18,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4"
-            }
-          }
-        }
-      }
-    },
     "hyperevm-testnet": {
       "family": "evm",
       "chainId": 998,
@@ -486,54 +374,6 @@
           "tokens": {
             "USDC": {
               "contractAddress": "0x2B3370eE501B4a559b57D449569354196457D8Ab"
-            }
-          }
-        }
-      }
-    },
-    "ink-sepolia": {
-      "family": "evm",
-      "chainId": 763373,
-      "bridges": {
-        "usdcx": {
-          "domain": 21,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0xFabab97dCE620294D2B0b0e46C68964e326300Ac"
-            }
-          }
-        }
-      }
-    },
-    "plume-testnet": {
-      "family": "evm",
-      "chainId": 98867,
-      "bridges": {
-        "usdcx": {
-          "domain": 22,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0xcB5f30e335672893c7eb944B374c196392C19D18"
-            }
-          }
-        }
-      }
-    },
-    "edge-testnet": {
-      "family": "evm",
-      "chainId": 33431,
-      "bridges": {
-        "usdcx": {
-          "domain": 28,
-          "depositEnabled": false,
-          "withdrawalEnabled": false,
-          "tokens": {
-            "USDC": {
-              "contractAddress": "0x2d9F7CAD728051AA35Ecdc472a14cf8cDF5CFD6B"
             }
           }
         }

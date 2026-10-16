@@ -23,18 +23,8 @@ export const CHAIN_IDS = {
   "avalanche-fuji": 43113,
   "optimism-sepolia": 11155420,
   "polygon-amoy": 80002,
-  "unichain-sepolia": 1301,
-  "linea-sepolia": 59141,
-  "codex-testnet": 812242,
-  "sonic-testnet": 14601,
-  "world-chain-sepolia": 4801,
   "monad-testnet": 10143,
-  "sei-testnet": 1328,
-  "xdc-apothem": 51,
   "hyperevm-testnet": 998,
-  "ink-sepolia": 763373,
-  "plume-testnet": 98867,
-  "edge-testnet": 33431,
 };
 export const SUPPORTED_EVM_CHAIN_IDS = Object.values(CHAIN_IDS);
 // Circle domains for the new testnet registry. Mainnet keeps its existing format.
@@ -46,18 +36,8 @@ const TESTNET_DOMAINS = {
   "avalanche-fuji": 1,
   "optimism-sepolia": 2,
   "polygon-amoy": 7,
-  "unichain-sepolia": 10,
-  "linea-sepolia": 11,
-  "codex-testnet": 12,
-  "sonic-testnet": 13,
-  "world-chain-sepolia": 14,
   "monad-testnet": 15,
-  "sei-testnet": 16,
-  "xdc-apothem": 18,
   "hyperevm-testnet": 19,
-  "ink-sepolia": 21,
-  "plume-testnet": 22,
-  "edge-testnet": 28,
   "solana-devnet": 5,
 };
 
