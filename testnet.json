@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 10,
+  "version": 11,
   "evm": {
     "chainId": 11155111
   },
@@ -184,6 +184,212 @@
           "tokens": {
             "USDC": {
               "contractAddress": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d"
+            }
+          }
+        }
+      }
+    }
+  },
+  "chains": {
+    "arc-testnet": {
+      "family": "evm",
+      "chainId": 5042002,
+      "bridges": {
+        "usdcx": {
+          "domain": 26,
+          "deposit": {
+            "route": "xreserve",
+            "xReserve": "0x008888878f94C0d87defdf0B07f46B93C1934442"
+          },
+          "executor": {
+            "address": "0xEdC81040756AcCfF070c21D37b265b9D0b5Ba45e",
+            "handler": "0xD05E7D2E7d30b92c5F17d7d0fC575fce231F1A48"
+          },
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x3600000000000000000000000000000000000000"
+            }
+          }
+        }
+      }
+    },
+    "sepolia": {
+      "family": "evm",
+      "chainId": 11155111,
+      "bridges": {
+        "usdcx": {
+          "domain": 0,
+          "deposit": {
+            "route": "executor",
+            "tokenMessenger": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+            "tokenMessengerWithFees": "0x8745D906D67C346E5eb1aEEED38Eb87F34DF0C0A",
+            "executorChain": "arc-testnet"
+          },
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+            }
+          }
+        },
+        "epoch": {
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
+              "outputs": [
+                "usdc-testnet-output"
+              ]
+            }
+          }
+        },
+        "agglayer": {
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "contractAddress": "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
+          "midenBridgeId": "0x187cabbc404359d16be94954ca9879"
+        }
+      }
+    },
+    "base-sepolia": {
+      "family": "evm",
+      "chainId": 84532,
+      "bridges": {
+        "usdcx": {
+          "domain": 6,
+          "deposit": {
+            "route": "executor",
+            "tokenMessenger": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+            "tokenMessengerWithFees": "0x8745D906D67C346E5eb1aEEED38Eb87F34DF0C0A",
+            "executorChain": "arc-testnet"
+          },
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+            }
+          }
+        }
+      }
+    },
+    "arbitrum-sepolia": {
+      "family": "evm",
+      "chainId": 421614,
+      "bridges": {
+        "usdcx": {
+          "domain": 3,
+          "deposit": {
+            "route": "executor",
+            "tokenMessenger": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+            "tokenMessengerWithFees": "0x8745D906D67C346E5eb1aEEED38Eb87F34DF0C0A",
+            "executorChain": "arc-testnet"
+          },
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d"
+            }
+          }
+        }
+      }
+    },
+    "avalanche-fuji": {
+      "family": "evm",
+      "chainId": 43113,
+      "bridges": {
+        "usdcx": {
+          "domain": 1,
+          "depositEnabled": false,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x5425890298aed601595a70AB815c96711a31Bc65"
+            }
+          }
+        }
+      }
+    },
+    "optimism-sepolia": {
+      "family": "evm",
+      "chainId": 11155420,
+      "bridges": {
+        "usdcx": {
+          "domain": 2,
+          "depositEnabled": false,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x5fd84259d66Cd46123540766Be93DFE6D43130D7"
+            }
+          }
+        }
+      }
+    },
+    "polygon-amoy": {
+      "family": "evm",
+      "chainId": 80002,
+      "bridges": {
+        "usdcx": {
+          "domain": 7,
+          "depositEnabled": false,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582"
+            }
+          }
+        }
+      }
+    },
+    "monad-testnet": {
+      "family": "evm",
+      "chainId": 10143,
+      "bridges": {
+        "usdcx": {
+          "domain": 15,
+          "depositEnabled": false,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x534b2f3A21130d7a60830c2Df862319e593943A3"
+            }
+          }
+        }
+      }
+    },
+    "hyperevm-testnet": {
+      "family": "evm",
+      "chainId": 998,
+      "bridges": {
+        "usdcx": {
+          "domain": 19,
+          "depositEnabled": false,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x2B3370eE501B4a559b57D449569354196457D8Ab"
+            }
+          }
+        }
+      }
+    },
+    "solana-devnet": {
+      "family": "solana",
+      "cluster": "devnet",
+      "bridges": {
+        "usdcx": {
+          "domain": 5,
+          "depositEnabled": false,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "mintAddress": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
             }
           }
         }

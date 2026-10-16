@@ -4,7 +4,8 @@ The wallet reads one network document from
 `https://raw.githubusercontent.com/0xMiden/wallet-config/main/<network>.json`.
 A changed document must have a higher `version`. The `network` must match the file name.
 
-Testnet is fully configured. Devnet keeps its published disabled document.
+Testnet keeps its four active USDCx routes and stages six more destinations.
+Devnet keeps its published disabled document.
 Mainnet lists its Guardian operator and routes USDCx from Arc, Ethereum, Base, and
 Arbitrum. Its Earn, Epoch, and Agglayer features are off, and it has no swap tokens.
 
@@ -30,9 +31,36 @@ Epoch `outputs` maps an output name to `{ "faucetId": "0x…" }`. The
 `usdc-testnet-output` entry identifies the special testnet faucet. Mainnet Epoch
 does not require this entry or any Miden faucet.
 
-`supportedEvmChains` maps chain slugs to `{ "chainId": number, "bridges": {} }`.
-The slug and id must match the wallet registry. Each bridge has `depositEnabled`
-and `withdrawalEnabled` booleans. A missing bridge is unavailable.
+`chains` maps chain slugs to network definitions. Each entry has a `family`:
+
+- `evm`: a numeric `chainId` and `bridges`.
+- `solana`: a `cluster` and `bridges`, without an EVM `chainId`.
+
+Each bridge has independent `depositEnabled` and `withdrawalEnabled` booleans.
+A missing bridge is unavailable. A withdrawal-only USDCx entry does not need
+`deposit`, `executor`, or TokenMessenger addresses. The Circle `domain` belongs
+under `bridges.usdcx`; it is not the EVM chain ID.
+
+Testnet version 11 adds `chains`. It keeps the four existing entries in
+`supportedEvmChains` for released wallets. The validator checks that these
+entries match `chains`, except for the new `family` field. New readers must use
+`chains` when present and use `supportedEvmChains` only when `chains` is absent.
+Do not merge the two lists. Mainnet and devnet keep their existing format.
+
+The wallet still needs a `chains` reader and the new chain definitions. A config
+entry alone does not add wallet support. Before enabling a new route, add its
+wallet RPC and explorer support, add its RPC to this repository's smoke checks,
+and verify that the bridge service can complete the withdrawal.
+
+For Solana Devnet, use `tokens.USDC.mintAddress` with Circle's Devnet mint.
+Solana deposits are not supported by this schema yet. An enabled Solana
+withdrawal checks that the mint exists under the SPL Token program, is initialized,
+and uses six decimals. The wallet must derive the recipient's USDC token account;
+the bridge service must ensure that account exists before payout.
+
+Address validation belongs in wallet code. EVM recipients use 20-byte addresses;
+Solana recipients use Base58-encoded
+32-byte addresses. Do not add address regexes to the remote document.
 
 | Bridge     | Route fields                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------- |
@@ -59,7 +87,7 @@ The executor chain must have a USDCx xReserve deposit route and an
 `executor` with `address` and `handler`. Its direction switches can be off.
 A deposit route is required when deposits are enabled. EVM addresses have 20
 bytes. Miden account ids have 15 bytes. Circle domains are unsigned 32-bit integers.
-Source tokens belong to each bridge. There is no global EVM chain or USDC address.
+Token addresses belong to each bridge. There is no global EVM chain or USDC address.
 
 Chain order sets picker order. Do not sort the chain keys. Do not repeat keys:
 JSON parsing would discard the first value. Validation checks the source text.
@@ -156,8 +184,38 @@ and services are ready. Keep route data while transfers can need recovery.
 
 Wallets released before the new reader (1.17.3 and earlier) read only the old
 root fields `evm`, `agglayer`, and `epoch`; without them every bridge and Earn
-feature turns off. Newer wallets
-read only `bridge-providers` and `supportedEvmChains`. Keep both shapes, with the
+feature turns off. Wallets with the current reader
+read only `bridge-providers` and `supportedEvmChains`. The proposed reader uses
+`chains` first. Keep both shapes, with the
 same values, until no supported release reads the old fields. A wallet never
 accepts a version below the highest it has accepted, so a revert ships as a new
 version.
+
+## Testnet withdrawal destinations
+
+The first four entries retain their existing picker order and deposit routes.
+All ten entries enable USDCx withdrawals. The six new entries keep deposits off.
+The wallet must support the new chain families before these routes appear.
+Solana payouts use an initialized USDC token account, as specified in Circle's
+[Gateway guide](https://developers.circle.com/gateway/references/solana) and
+[CCTP guide](https://developers.circle.com/cctp/references/solana-programs).
+
+| Chain slug | EVM chain ID / Solana cluster | Circle domain |
+| --- | --- | --- |
+| arc-testnet | 5042002 | 26 |
+| sepolia | 11155111 | 0 |
+| base-sepolia | 84532 | 6 |
+| arbitrum-sepolia | 421614 | 3 |
+| avalanche-fuji | 43113 | 1 |
+| optimism-sepolia | 11155420 | 2 |
+| polygon-amoy | 80002 | 7 |
+| monad-testnet | 10143 | 15 |
+| hyperevm-testnet | 998 | 19 |
+| solana-devnet | devnet | 5 |
+
+Reference data checked on 2026-10-16:
+
+- [Circle domain IDs](https://developers.circle.com/cctp/concepts/supported-chains-and-domains)
+- [Circle native USDC addresses](https://developers.circle.com/stablecoins/usdc-contract-addresses)
+- [Chainlink network IDs](https://docs.chain.link/resources/link-token-contracts)
+- [Viem chain definitions](https://github.com/wevm/viem/tree/main/src/chains/definitions)
