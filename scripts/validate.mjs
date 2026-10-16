@@ -74,6 +74,11 @@ const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
 
 /** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
 export const EVM_RPCS = {
+  43113: ["https://api.avax-test.network/ext/bc/C/rpc"],
+  11155420: ["https://sepolia.optimism.io"],
+  80002: ["https://polygon-amoy-bor-rpc.publicnode.com", "https://rpc-amoy.polygon.technology"],
+  10143: ["https://testnet-rpc.monad.xyz"],
+  998: ["https://rpc.hyperliquid-testnet.xyz/evm"],
   5042002: ["https://rpc.testnet.arc.io"],
   84532: ["https://sepolia.base.org"],
   421614: ["https://sepolia-rollup.arbitrum.io/rpc"],

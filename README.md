@@ -191,11 +191,14 @@ same values, until no supported release reads the old fields. A wallet never
 accepts a version below the highest it has accepted, so a revert ships as a new
 version.
 
-## Staged testnet destinations
+## Testnet withdrawal destinations
 
-The first four entries retain their existing picker order and active routes.
-All other entries have both direction switches off. Testnet version 11 includes
-these networks; it does not enable new withdrawals in a released wallet.
+The first four entries retain their existing picker order and deposit routes.
+All ten entries enable USDCx withdrawals. The six new entries keep deposits off.
+The wallet must support the new chain families before these routes appear.
+Solana payouts use an initialized USDC token account, as specified in Circle's
+[Gateway guide](https://developers.circle.com/gateway/references/solana) and
+[CCTP guide](https://developers.circle.com/cctp/references/solana-programs).
 
 | Chain slug | EVM chain ID / Solana cluster | Circle domain |
 | --- | --- | --- |

@@ -527,7 +527,7 @@ test("refuses a document whose new Guardian operator is down and passes one whos
   }
 });
 
-test("chains stages 10 destinations and preserves the four published routes", () => {
+test("chains enables 10 withdrawals and preserves the four published deposit routes", () => {
   const body = structuredClone(source);
   const result = parseBridgeConfigDetailed(body, "testnet");
   assert.deepEqual(result.errors, []);
@@ -548,15 +548,20 @@ test("chains stages 10 destinations and preserves the four published routes", ()
       continue;
     }
     assert.equal(chain.bridges.usdcx.depositEnabled, false);
-    assert.equal(chain.bridges.usdcx.withdrawalEnabled, false);
+    assert.equal(chain.bridges.usdcx.withdrawalEnabled, true);
     assert.equal(chain.bridges.usdcx.deposit, undefined);
   }
   const descriptions = (config) =>
     plannedChecks(config).map(({ healthy, ...check }) => check);
-  assert.deepEqual(
-    descriptions(result.config),
-    descriptions(parseBridgeConfig(copy(), "testnet")),
-  );
+  const checks = descriptions(result.config);
+  for (const check of descriptions(parseBridgeConfig(copy(), "testnet"))) {
+    assert.deepEqual(checks.find((entry) => entry.key === check.key), check);
+  }
+  for (const chainId of [43113, 11155420, 80002, 10143, 998]) {
+    assert.ok(checks.some((entry) => entry.kind === "evm-chain" && entry.chainId === chainId));
+    assert.ok(checks.some((entry) => entry.kind === "evm-code" && entry.chainId === chainId));
+  }
+  assert.ok(checks.some((entry) => entry.key === "solana:devnet"));
 });
 
 test("chains rejects invalid families, identities, domains, and legacy drift", async (t) => {

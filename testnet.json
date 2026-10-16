@@ -306,7 +306,7 @@
         "usdcx": {
           "domain": 1,
           "depositEnabled": false,
-          "withdrawalEnabled": false,
+          "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
               "contractAddress": "0x5425890298aed601595a70AB815c96711a31Bc65"
@@ -322,7 +322,7 @@
         "usdcx": {
           "domain": 2,
           "depositEnabled": false,
-          "withdrawalEnabled": false,
+          "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
               "contractAddress": "0x5fd84259d66Cd46123540766Be93DFE6D43130D7"
@@ -338,7 +338,7 @@
         "usdcx": {
           "domain": 7,
           "depositEnabled": false,
-          "withdrawalEnabled": false,
+          "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
               "contractAddress": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582"
@@ -354,7 +354,7 @@
         "usdcx": {
           "domain": 15,
           "depositEnabled": false,
-          "withdrawalEnabled": false,
+          "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
               "contractAddress": "0x534b2f3A21130d7a60830c2Df862319e593943A3"
@@ -370,7 +370,7 @@
         "usdcx": {
           "domain": 19,
           "depositEnabled": false,
-          "withdrawalEnabled": false,
+          "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
               "contractAddress": "0x2B3370eE501B4a559b57D449569354196457D8Ab"
@@ -386,7 +386,7 @@
         "usdcx": {
           "domain": 5,
           "depositEnabled": false,
-          "withdrawalEnabled": false,
+          "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
               "mintAddress": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
