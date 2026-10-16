@@ -3,6 +3,7 @@
  * Validate network documents, version changes, and enabled routes with Node 22, and ask every
  * listed Guardian operator for its key.
  */
+import { isDeepStrictEqual } from "node:util";
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -19,8 +20,47 @@ export const CHAIN_IDS = {
   arbitrum: 42161,
   optimism: 10,
   arc: 5042,
+  "avalanche-fuji": 43113,
+  "optimism-sepolia": 11155420,
+  "polygon-amoy": 80002,
+  "unichain-sepolia": 1301,
+  "linea-sepolia": 59141,
+  "codex-testnet": 812242,
+  "sonic-testnet": 14601,
+  "world-chain-sepolia": 4801,
+  "monad-testnet": 10143,
+  "sei-testnet": 1328,
+  "xdc-apothem": 51,
+  "hyperevm-testnet": 998,
+  "ink-sepolia": 763373,
+  "plume-testnet": 98867,
+  "edge-testnet": 33431,
 };
 export const SUPPORTED_EVM_CHAIN_IDS = Object.values(CHAIN_IDS);
+// Circle domains for the new testnet registry. Mainnet keeps its existing format.
+const TESTNET_DOMAINS = {
+  "arc-testnet": 26,
+  sepolia: 0,
+  "base-sepolia": 6,
+  "arbitrum-sepolia": 3,
+  "avalanche-fuji": 1,
+  "optimism-sepolia": 2,
+  "polygon-amoy": 7,
+  "unichain-sepolia": 10,
+  "linea-sepolia": 11,
+  "codex-testnet": 12,
+  "sonic-testnet": 13,
+  "world-chain-sepolia": 14,
+  "monad-testnet": 15,
+  "sei-testnet": 16,
+  "xdc-apothem": 18,
+  "hyperevm-testnet": 19,
+  "ink-sepolia": 21,
+  "plume-testnet": 22,
+  "edge-testnet": 28,
+  "solana-devnet": 5,
+};
+
 /** The marks the wallet ships for a swap token's logo (components/TokenLogo). */
 export const SUPPORTED_SWAP_TOKEN_LOGOS = ["MIDEN", "ETH", "USDC", "BTC"];
 /** The assets the wallet's price feed quotes (lib/prices/constant.ts KNOWN_SYMBOLS). */
@@ -153,8 +193,8 @@ function readUrl(section, label, field, allowLocalHttp, errors) {
 }
 
 /**
- * The wallet's `parseBridgeConfig`, with the reasons it rejects and the values it drops.
- * `config` is null exactly when the wallet would ignore the document.
+ * Validate legacy documents and the proposed chains format.
+ * The wallet must add a chains reader before it can use the new destinations.
  */
 export function parseBridgeConfigDetailed(body, network, options = {}) {
   const errors = [];
@@ -175,7 +215,24 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
       errors.push(`features.${name} must be boolean`);
   }
   const providers = readSection(body, "bridge-providers", errors);
-  const chains = readSection(body, "supportedEvmChains", errors);
+  const usesChains = body.chains !== undefined;
+  const chains = readSection(
+    body,
+    usesChains ? "chains" : "supportedEvmChains",
+    errors,
+  );
+  if (usesChains && body.supportedEvmChains !== undefined) {
+    const { chains: currentChains, ...legacy } = body;
+    const legacyResult = parseBridgeConfigDetailed(legacy, network, options);
+    errors.push(...legacyResult.errors.map((error) => `legacy: ${error}`));
+    for (const [slug, entry] of Object.entries(
+      legacyResult.config?.supportedEvmChains ?? {},
+    )) {
+      const { family, ...current } = chains[slug] ?? {};
+      if (family !== "evm" || !isDeepStrictEqual(current, entry))
+        errors.push(`chains.${slug} differs from supportedEvmChains`);
+    }
+  }
   const required = (object, key, label, pattern) => {
     if (typeof object[key] !== "string" || !pattern.test(object[key]))
       errors.push(`${label}.${key} is missing or invalid`);
@@ -234,7 +291,29 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
       errors.push(`invalid chain ${name}`);
       continue;
     }
-    if (CHAIN_IDS[name] !== chain.chainId)
+    const family = usesChains ? chain.family : "evm";
+    if (
+      usesChains &&
+      network !== "mainnet" &&
+      chain.bridges?.usdcx !== undefined &&
+      chain.bridges.usdcx.domain !== TESTNET_DOMAINS[name]
+    )
+      errors.push(`${name}.domain does not match the testnet registry`);
+    if (family === "solana") {
+      validateSolanaChain(name, chain, network, providers, errors);
+      continue;
+    }
+    if (family !== "evm") {
+      errors.push(`${name}.family must be evm or solana`);
+      continue;
+    }
+    if (chain.cluster !== undefined)
+      errors.push(`${name}.cluster is only valid for Solana`);
+    if (
+      !Number.isSafeInteger(chain.chainId) ||
+      chain.chainId < 1 ||
+      CHAIN_IDS[name] !== chain.chainId
+    )
       errors.push(`${name}.chainId does not match the wallet registry`);
     if (seenIds.has(chain.chainId))
       errors.push(`duplicate chain id ${chain.chainId}`);
@@ -359,7 +438,12 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           ...body,
           features: { ...featuresIn, earn: featuresIn.earn === true },
           "bridge-providers": providers,
-          supportedEvmChains: chains,
+          chains,
+          supportedEvmChains: Object.fromEntries(
+            Object.entries(chains).filter(
+              ([, chain]) => chain.family !== "solana",
+            ),
+          ),
           swap,
           mainnetCountdown: readCountdown(body.mainnetCountdown),
           onboarding,
@@ -368,6 +452,44 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     errors,
     dropped,
   };
+}
+
+function validateSolanaChain(name, chain, network, providers, errors) {
+  if (
+    name !== "solana-devnet" ||
+    chain.cluster !== "devnet" ||
+    network === "mainnet"
+  )
+    errors.push(`${name} must use solana-devnet on a Miden test network`);
+  if (chain.chainId !== undefined)
+    errors.push(`${name} must not have an EVM chainId`);
+  if (!isRecord(chain.bridges)) {
+    errors.push(`${name}.bridges must be an object`);
+    return;
+  }
+  for (const [kind, bridge] of Object.entries(chain.bridges)) {
+    if (kind !== "usdcx" || !isRecord(bridge)) {
+      errors.push(`${name} only supports a USDCx bridge`);
+      continue;
+    }
+    if (!isRecord(providers.usdcx))
+      errors.push(`${name} requires bridge-providers.usdcx`);
+    if (bridge.domain !== 5) errors.push(`${name}.domain must be 5`);
+    if (
+      bridge.depositEnabled !== false ||
+      bridge.deposit !== undefined ||
+      bridge.executor !== undefined
+    )
+      errors.push(`${name} does not support deposits`);
+    if (typeof bridge.withdrawalEnabled !== "boolean")
+      errors.push(`${name}.withdrawalEnabled must be boolean`);
+    const token = bridge.tokens?.USDC;
+    if (
+      token?.mintAddress !== "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" ||
+      token.contractAddress !== undefined
+    )
+      errors.push(`${name} requires the Circle USDC Devnet mintAddress`);
+  }
 }
 
 function readGuardianLabel(
@@ -659,9 +781,19 @@ export function plannedChecks(config, { publishedGuardians = [] } = {}) {
     });
   const service = (key, url, healthy) =>
     add({ key, kind: "http", url, healthy });
-  for (const [name, chain] of Object.entries(config.supportedEvmChains)) {
+  for (const [name, chain] of Object.entries(
+    config.chains ?? config.supportedEvmChains,
+  )) {
     for (const [kind, bridge] of Object.entries(chain.bridges)) {
       if (!bridge.depositEnabled && !bridge.withdrawalEnabled) continue;
+      if (chain.family === "solana") {
+        add({
+          key: `solana:${chain.cluster}`,
+          kind: "solana-mint",
+          address: bridge.tokens.USDC.mintAddress,
+        });
+        continue;
+      }
       add({
         key: `chain:${chain.chainId}`,
         kind: "evm-chain",
@@ -844,6 +976,41 @@ async function runCheck(check, config, fetchImpl) {
       return httpHealth(check, fetchImpl);
     case "guardian":
       return guardianPubkey(check, fetchImpl);
+    case "solana-mint": {
+      const res = await fetchWithTimeout(
+        fetchImpl,
+        "https://api.devnet.solana.com",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "getAccountInfo",
+            params: [
+              check.address,
+              { encoding: "jsonParsed", commitment: "confirmed" },
+            ],
+          }),
+        },
+      );
+      const body = await res.json();
+      const account = body?.result?.value;
+      const parsed = account?.data?.parsed;
+      const ok =
+        res.status === 200 &&
+        !body.error &&
+        account?.owner === "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" &&
+        parsed?.type === "mint" &&
+        parsed.info?.decimals === 6 &&
+        parsed.info?.isInitialized === true;
+      return {
+        ok,
+        detail: ok
+          ? "Solana Devnet USDC mint is initialized with six decimals"
+          : "Solana Devnet USDC mint check failed",
+      };
+    }
     case "evm-chain": {
       const answered = Number(
         await evmRpc(check.chainId, "eth_chainId", [], fetchImpl),
@@ -1036,6 +1203,7 @@ export async function validateFile(
     ...switchErrors(parsed.config),
     ...swapErrors(parsed.config),
     ...countdownErrors(body),
+    ...duplicateKeys(text, ["chains"]).map((key) => `chains repeats ${key}`),
     ...duplicateKeys(text, ["supportedEvmChains"]).map(
       (key) => `supportedEvmChains repeats ${key}`,
     ),

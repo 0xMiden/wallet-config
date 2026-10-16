@@ -23,7 +23,11 @@ import {
 const source = JSON.parse(
   readFileSync(new URL("../testnet.json", import.meta.url)),
 );
-const copy = () => structuredClone(source);
+const copy = () => {
+  const body = structuredClone(source);
+  delete body.chains;
+  return body;
+};
 // The route and service checks alone: the Guardian checks have their own tests below.
 const withoutGuardians = () => {
   const body = copy();
@@ -240,7 +244,12 @@ test("smoke checks report contract and service failures", async (t) => {
 });
 
 test("preserves the published feature keys and validates their boolean values", () => {
-  assert.deepEqual(source.features, { earn: true, fastBridge: true, bridgeIn: true, bridgeOut: true });
+  assert.deepEqual(source.features, {
+    earn: true,
+    fastBridge: true,
+    bridgeIn: true,
+    bridgeOut: true,
+  });
   for (const name of Object.keys(source.features)) {
     const body = copy();
     body.features[name] = false;
@@ -248,7 +257,7 @@ test("preserves the published feature keys and validates their boolean values", 
     assert.deepEqual(result.errors, []);
     assert.equal(result.config.features[name], false);
     body.features[name] = "true";
-    assert.ok(errors(body).some(error => error.includes(`features.${name}`)));
+    assert.ok(errors(body).some((error) => error.includes(`features.${name}`)));
   }
 });
 
@@ -359,7 +368,10 @@ test("refuses a Guardian about or kind that is not one line of English text with
       withGuardians([{ ...guardianEntry(0), ...fields }]),
       "testnet",
     );
-  assert.notEqual(parse({ about: "a".repeat(160), kind: "k".repeat(64) }), null);
+  assert.notEqual(
+    parse({ about: "a".repeat(160), kind: "k".repeat(64) }),
+    null,
+  );
   assert.equal(parse({ about: "a".repeat(161) }), null);
   assert.equal(parse({ kind: "k".repeat(65) }), null);
   assert.equal(parse({ about: "" }), null);
@@ -477,7 +489,10 @@ test("refuses a document whose new Guardian operator is down and passes one whos
       path.join(root, "testnet.json"),
       JSON.stringify(readFixture("good", "testnet-guardians.json")),
     );
-    const fetchImpl = guardianWorld({ [OZ]: healthyGuardians[OZ], [KODA]: 503 });
+    const fetchImpl = guardianWorld({
+      [OZ]: healthyGuardians[OZ],
+      [KODA]: 503,
+    });
     const added = await validateFile("testnet.json", {
       root,
       smoke: true,
@@ -510,4 +525,145 @@ test("refuses a document whose new Guardian operator is down and passes one whos
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("chains stages all 20 destinations and preserves the four published routes", () => {
+  const body = structuredClone(source);
+  const result = parseBridgeConfigDetailed(body, "testnet");
+  assert.deepEqual(result.errors, []);
+  assert.equal(Object.keys(result.config.chains).length, 20);
+  assert.equal(Object.keys(result.config.supportedEvmChains).length, 19);
+  const domains = Object.values(body.chains).map(
+    (chain) => chain.bridges.usdcx.domain,
+  );
+  assert.deepEqual(
+    domains.sort((a, b) => a - b),
+    [0, 1, 2, 3, 5, 6, 7, 10, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22, 26, 28],
+  );
+  for (const [slug, chain] of Object.entries(body.chains)) {
+    if (body.supportedEvmChains[slug]) {
+      const { family, ...legacy } = chain;
+      assert.equal(family, "evm");
+      assert.deepEqual(legacy, body.supportedEvmChains[slug]);
+      continue;
+    }
+    assert.equal(chain.bridges.usdcx.depositEnabled, false);
+    assert.equal(chain.bridges.usdcx.withdrawalEnabled, false);
+    assert.equal(chain.bridges.usdcx.deposit, undefined);
+  }
+  const descriptions = (config) =>
+    plannedChecks(config).map(({ healthy, ...check }) => check);
+  assert.deepEqual(
+    descriptions(result.config),
+    descriptions(parseBridgeConfig(copy(), "testnet")),
+  );
+});
+
+test("chains rejects invalid families, identities, domains, and legacy drift", async (t) => {
+  const mutations = [
+    (b) => {
+      b.chains = null;
+    },
+    (b) => {
+      b.chains["avalanche-fuji"].family = "other";
+    },
+    (b) => {
+      delete b.chains["avalanche-fuji"].family;
+    },
+    (b) => {
+      b.chains["avalanche-fuji"].chainId = 43114;
+    },
+    (b) => {
+      b.chains["avalanche-fuji"].bridges.usdcx.domain = 0;
+    },
+    (b) => {
+      b.chains["avalanche-fuji"].bridges.usdcx.tokens.USDC.contractAddress =
+        "invalid";
+    },
+    (b) => {
+      b.chains["solana-devnet"].chainId = 5;
+    },
+    (b) => {
+      b.chains["solana-devnet"].cluster = "mainnet-beta";
+    },
+    (b) => {
+      b.chains["solana-devnet"].bridges.usdcx.domain = 6;
+    },
+    (b) => {
+      b.chains["solana-devnet"].bridges.usdcx.withdrawalEnabled = "true";
+    },
+    (b) => {
+      b.chains["solana-devnet"].bridges.usdcx.depositEnabled = true;
+    },
+    (b) => {
+      b.chains["solana-devnet"].bridges.usdcx.tokens.USDC.mintAddress =
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    },
+    (b) => {
+      b.chains.sepolia.bridges.usdcx.withdrawalEnabled = false;
+    },
+    (b) => {
+      delete b.chains.sepolia;
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.chainId = 1;
+    },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    await t.test(`rejects chains mutation ${index + 1}`, () => {
+      const body = structuredClone(source);
+      mutate(body);
+      assert.equal(parseBridgeConfigDetailed(body, "testnet").config, null);
+    });
+  }
+});
+
+test("chains works without the legacy field and detects duplicate keys", () => {
+  const body = structuredClone(source);
+  delete body.supportedEvmChains;
+  assert.deepEqual(errors(body), []);
+  assert.deepEqual(
+    duplicateKeys('{"chains":{"solana-devnet":{},"solana-devnet":{}}}', [
+      "chains",
+    ]),
+    ["solana-devnet"],
+  );
+});
+
+test("Solana withdrawal checks the token mint through Solana RPC", async () => {
+  const body = structuredClone(source);
+  delete body.guardians;
+  delete body.supportedEvmChains;
+  body.chains = { "solana-devnet": body.chains["solana-devnet"] };
+  body.chains["solana-devnet"].bridges.usdcx.withdrawalEnabled = true;
+  body.features.earn = false;
+  const config = parseBridgeConfig(body, "testnet");
+  assert.equal(plannedChecks(config).length, 1);
+  const account = {
+    owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    data: {
+      parsed: { type: "mint", info: { decimals: 6, isInitialized: true } },
+    },
+  };
+  const fetchImpl = async (url, options) => {
+    assert.equal(url, "https://api.devnet.solana.com");
+    const request = JSON.parse(options.body);
+    assert.equal(request.method, "getAccountInfo");
+    assert.equal(
+      request.params[0],
+      "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+    );
+    return { status: 200, json: async () => ({ result: { value: account } }) };
+  };
+  assert.equal((await smokeTest(config, fetchImpl))[0].ok, true);
+  account.data.parsed.info.decimals = 9;
+  assert.equal((await smokeTest(config, fetchImpl))[0].ok, false);
+  assert.equal(
+    (
+      await smokeTest(config, async () => {
+        throw new Error("RPC unavailable");
+      })
+    )[0].ok,
+    false,
+  );
 });
