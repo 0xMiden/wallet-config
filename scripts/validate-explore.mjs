@@ -15,7 +15,7 @@ import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const EXPLORE_CATEGORIES = ['tools', 'defi', 'games', 'nft', 'learn'];
+export const EXPLORE_CATEGORIES = ['finance', 'arcade', 'others'];
 export const EXPLORE_SECTION_KINDS = ['featured', 'list'];
 /** The ids of the sections the wallet adds itself (Recents, the search results). */
 export const RESERVED_SECTION_IDS = ['recents', 'search-results'];
@@ -309,6 +309,12 @@ export function validateFile(file, { baseRef, root = REPO_ROOT } = {}) {
   errors.push(...parsed.errors);
   notes.push(...parsed.dropped.map(reason => `dropped: ${reason}`));
   if (parsed.catalog === null) return { errors, notes };
+  // Publication is stricter than the forward-compatible reader: do not silently publish invisible listings.
+  for (const [index, item] of body.items.entries()) {
+    if (!EXPLORE_CATEGORIES.includes(item.category)) {
+      errors.push(`items[${index}].category must be finance, arcade or others (All is an aggregate)`);
+    }
+  }
   try {
     const bump = versionError(text, parsed.catalog.version, baseText(baseRef, file, root));
     if (bump !== null) errors.push(bump);

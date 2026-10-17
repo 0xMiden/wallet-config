@@ -14,14 +14,15 @@ Bread 1.17.3's [Explore reader](https://github.com/0xMiden/wallet/blob/v1.17.3/s
 still loads per-network catalogs from [wallet-explore](https://github.com/0xMiden/wallet-explore).
 This PR adds the compatible catalog at `explore/<network>.json`, its icons and a
 validator. See [Explore catalog](explore-catalog.md) for the exact schema and
-publication rules. Existing devnet and testnet entries are migrated unchanged.
+publication rules. Existing entries and URLs are preserved; categories match the
+three Explore tabs directly, with higher devnet/testnet document versions.
 The matching reader is in [wallet PR #1512](https://github.com/0xMiden/wallet/pull/1512).
 Catalog publication here reaches only wallets released with that reader; merging
 these files alone does not move existing wallets off wallet-explore.
 
 Register a reviewed app by editing the appropriate Explore catalog and bumping
-its version. Do not add an `apps` field to the root bridge/swap documents, or use
-the visible Finance/Arcade/Others labels as serialized categories. An unavailable
+its version. Use `finance`, `arcade` or `others` as the category; All is an aggregate.
+Do not add an `apps` field to the root bridge/swap documents. An unavailable
 production URL belongs in the candidate record, not in an active catalog item.
 There is no registration API, automatic approval or leaderboard submission service.
 
@@ -39,7 +40,7 @@ Collect these facts before opening the catalog registration PR:
 |---|---|
 | App identity | Stable proposed ID, name, useful short description, publisher/owner and support route. |
 | Deployment | Intended HTTPS launch/review URLs, source/review access, app commit and deployed release identifier. Label demonstrations explicitly. |
-| Placement | Requested Finance, Arcade or Others group and the compatible current serialized category. All is an aggregate view, not a submitted category. |
+| Placement | `finance`, `arcade` or `others`, matching the intended native Explore tab. All is an aggregate view, not a submitted category. |
 | Compatibility | Network, account types, exact tested Bread versions/platforms and dependency/contract versions. |
 | Capabilities | Minimal wallet/private-data access, backend/API origins, collected data and public/on-chain disclosures. |
 | Presentation | Ordinary layout or optional native fullscreen; readiness, safe areas, rotation and Back to Bread behavior tested on the target build. |
@@ -58,11 +59,11 @@ view; Others contains remaining utilities, NFTs and learning. Games continue to
 launch through the existing dApp browser. The earlier external Arcade-site
 proposal is superseded.
 
-The current catalog values remain `tools`, `defi`, `games`, `nft` and `learn` until
-a compatible mapping or coordinated migration is implemented. Preserve existing
-entries, network selection, search, recents and platform gates. Review utility
-classification into Finance or Others; do not change serialized values ahead of
-their parser. Target tabs do not establish new JSON fields.
+Published category values are `finance`, `arcade` and `others`. The matching wallet
+reader and bundled snapshots change together; legacy cache reading is a separate
+upgrade path. Preserve entries, network selection, search, recents and platform
+gates. Put financial helpers in Finance and other utilities in Others. Older
+released wallets keep their legacy wallet-explore schema until they upgrade.
 
 Games must describe their own scoring, any public result data and any reviewed
 challenge protocol they use. Game-specific rankings belong to the game. The native

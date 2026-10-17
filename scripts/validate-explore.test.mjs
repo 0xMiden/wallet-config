@@ -118,7 +118,7 @@ describe('parseExploreConfig', () => {
       'zh_CN',
       'zh_TW'
     ]);
-    assert.deepEqual(EXPLORE_CATEGORIES, ['tools', 'defi', 'games', 'nft', 'learn']);
+    assert.deepEqual(EXPLORE_CATEGORIES, ['finance', 'arcade', 'others']);
     assert.deepEqual(EXPLORE_SECTION_KINDS, ['featured', 'list']);
     assert.deepEqual(RESERVED_SECTION_IDS, ['recents', 'search-results']);
   });
@@ -153,7 +153,7 @@ describe('validateFile', () => {
         name: { en: 'Faucet' },
         tagline: { en: 'Get tokens' },
         url: 'https://faucet.example/',
-        category: 'tools',
+        category: 'finance',
         icon: 'icons/faucet.png',
         isExchange: false
       }
@@ -166,6 +166,19 @@ describe('validateFile', () => {
     write(root, 'devnet.json', JSON.stringify(doc('testnet')));
     write(root, 'icons/faucet.png', png(64, 64));
     assert.deepEqual(validateFile('devnet.json', { root }).errors, ['network must be "devnet"']);
+  });
+
+  it('publishes only the three exact native categories, never legacy names or All', () => {
+    for (const category of ['tools', 'defi', 'games', 'nft', 'learn', 'all', 'unknown']) {
+      const root = tempRoot();
+      const body = doc('testnet');
+      body.items[0].category = category;
+      write(root, 'testnet.json', JSON.stringify(body));
+      write(root, 'icons/faucet.png', png(64, 64));
+      assert.deepEqual(validateFile('testnet.json', { root }).errors, [
+        'items[0].category must be finance, arcade or others (All is an aggregate)'
+      ]);
+    }
   });
 
   it('refuses a document larger than a wallet reads', () => {
@@ -182,7 +195,10 @@ describe('validateFile', () => {
     const body = doc('testnet');
     body.items[0].category = 'quests';
     write(root, 'testnet.json', JSON.stringify(body));
-    assert.deepEqual(validateFile('testnet.json', { root }).errors, ['icons/faucet.png is missing']);
+    assert.deepEqual(validateFile('testnet.json', { root }).errors, [
+      'items[0].category must be finance, arcade or others (All is an aggregate)',
+      'icons/faucet.png is missing'
+    ]);
   });
 
   it('resolves icons under the catalog directory, never the root bridge directory', () => {
@@ -298,7 +314,7 @@ describe('baseText and the base-ref version rule', () => {
           name: { en: 'Faucet' },
           tagline: { en: tagline },
           url: 'https://faucet.example/',
-          category: 'tools',
+          category: 'finance',
           icon: 'icons/faucet.png',
           isExchange: false
         }

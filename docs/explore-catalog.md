@@ -27,7 +27,7 @@ transaction approval. There is no balance collection or leaderboard service here
 | `items[].name` | Localized text, at most 40 Unicode characters in each language. |
 | `items[].tagline` | Localized text, at most 120 Unicode characters in each language. |
 | `items[].url` | HTTPS launch URL, no credentials, IP literal, localhost or punycode hostname. Query and fragment are allowed; kept exactly as written. |
-| `items[].category` | `tools`, `defi`, `games`, `nft` or `learn`. |
+| `items[].category` | Exactly `finance`, `arcade` or `others`, matching the native Explore tabs. |
 | `items[].icon` | Optional `icons/<name>.png`, relative to `explore/`; `<name>` uses lowercase letters, digits and hyphens. |
 | `items[].brandColor` | Optional `#RRGGBB`. |
 | `items[].isExchange` | Required boolean. Existing wallet/platform exchange gates still apply. |
@@ -42,9 +42,13 @@ optional. Readers try the current locale, its base language, then English.
 Unsupported locales and unknown fields are ignored. Unknown categories or section
 kinds are omitted by readers; a malformed known field rejects the whole document.
 
-The wallet maps `tools`/`defi` to Finance, `games` to Arcade, and `nft`/`learn` to
-Others. All aggregates these groups. Do not serialize `all`, `finance`, `arcade`
-or `others`; that would not be compatible with current catalog parsers.
+The category is the tab directly: `finance` → Finance, `arcade` → Arcade, and
+`others` → Others. All aggregates all three; never serialize `all`. Choose the
+actual category for each app, including Others for non-financial utilities.
+Publication validation rejects legacy categories and unknown categories rather
+than silently publishing an item the UI cannot show. Only the wallet's persisted
+cache reader converts old `tools`/`defi`, `games`, and `nft`/`learn` values on upgrade;
+that compatibility path is not the schema for new fetched catalogs.
 
 Every icon must be a regular PNG file, not a symlink or reached through one,
 square, at most 256×256 and 32 KiB. A catalog must fit in 32 KiB.
@@ -82,22 +86,27 @@ versions; never reset a floor to make an old document load.
 
 ## Migration and rollout
 
-The initial devnet (version 1), testnet (version 2) and three PNG icons are byte
-copies of [wallet-explore at f5dad85](https://github.com/0xMiden/wallet-explore/tree/f5dad85b54dc074836c31e587b15ee509130cb6c).
-The unchanged bodies preserve existing version floors and same-version identity
-checks. The matching reader migration is [wallet #1512](https://github.com/0xMiden/wallet/pull/1512).
-No mainnet catalog or new game is invented by this migration.
+The initial entries come from [wallet-explore at f5dad85](https://github.com/0xMiden/wallet-explore/tree/f5dad85b54dc074836c31e587b15ee509130cb6c).
+Launch URLs, app identities, text, section order and all three PNG icons are
+preserved. Categories now match Explore directly, so these are new document
+versions: devnet **2**, testnet **3**, not changed bodies at old versions. The
+wallet keeps existing cache keys/floors, upgrades persisted legacy categories
+without rewriting them, and rejects a changed same-version response. Its bundled
+snapshots match these new canonical catalogs. The matching reader migration is
+[wallet #1512](https://github.com/0xMiden/wallet/pull/1512). No mainnet catalog or
+new game is invented by this migration.
 
 1. Review and merge these catalogs/validator before shipping the new reader.
 2. Recheck wallet-explore for intervening changes immediately before publication
-   and copy them here with their versions; never ship a lower version or different
-   body at an already accepted version.
+   and preserve their metadata here using the new categories. Ship at a version
+   above the old accepted catalog; never change a body at an already accepted version.
 3. Verify the wallet's bundled snapshots against the published wallet-config
    copies, and ship the reader. A missing new endpoint leaves cached/bundled data
    intact but cannot deliver new registrations.
 4. Keep wallet-explore available for older supported wallets. Mirror reviewed
-   listing changes there while those versions remain supported, preserving one
-   body per network/version across both sources. Do not delete or redirect it as
+   listing changes there using its legacy schema while those versions remain
+   supported. Keep one immutable body per network/version within each source,
+   and the new source ahead of the legacy version before an upgrade. Do not delete or redirect it as
    part of this PR. Both catalogs are unsigned; repository merge authority remains
    the publication boundary.
 
