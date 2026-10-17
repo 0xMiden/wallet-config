@@ -1,0 +1,116 @@
+{
+  "network": "mainnet",
+  "version": 2,
+  "guardians": [
+    {
+      "id": "lambda-class",
+      "name": "LambdaClass",
+      "operatedBy": "LambdaClass",
+      "location": "US-EAST",
+      "endpoint": "https://guardian.cedar.internal.lambdaclass.com",
+      "about": "LambdaClass, an engineering firm that builds zero-knowledge systems.",
+      "kind": "Zero-knowledge systems engineering"
+    }
+  ],
+  "features": {
+    "earn": false,
+    "fastBridge": false,
+    "bridgeIn": true,
+    "bridgeOut": true
+  },
+  "bridge-providers": {
+    "usdcx": {
+      "midenDomain": 10007,
+      "attestationUrl": "https://xreserve-api.circle.com",
+      "irisUrl": "https://iris-api.circle.com"
+    }
+  },
+  "supportedEvmChains": {
+    "arc": {
+      "chainId": 5042,
+      "bridges": {
+        "usdcx": {
+          "domain": 26,
+          "deposit": {
+            "route": "xreserve",
+            "xReserve": "0x8888888199b2Df864bf678259607d6D5EBb4e3Ce"
+          },
+          "executor": {
+            "address": "0xFa7be2f04F3Ad4ca969260729c6d45B5625984A7",
+            "handler": "0x16529813203f77e036576666336554a1210dce4d"
+          },
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x3600000000000000000000000000000000000000"
+            }
+          }
+        }
+      }
+    },
+    "ethereum": {
+      "chainId": 1,
+      "bridges": {
+        "usdcx": {
+          "domain": 0,
+          "deposit": {
+            "route": "executor",
+            "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+            "tokenMessengerWithFees": "0x71f54F818671cD0D7ea140Da213e5C8b5C92a408",
+            "executorChain": "arc"
+          },
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            }
+          }
+        }
+      }
+    },
+    "base": {
+      "chainId": 8453,
+      "bridges": {
+        "usdcx": {
+          "domain": 6,
+          "deposit": {
+            "route": "executor",
+            "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+            "tokenMessengerWithFees": "0x71f54F818671cD0D7ea140Da213e5C8b5C92a408",
+            "executorChain": "arc"
+          },
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            }
+          }
+        }
+      }
+    },
+    "arbitrum": {
+      "chainId": 42161,
+      "bridges": {
+        "usdcx": {
+          "domain": 3,
+          "deposit": {
+            "route": "executor",
+            "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+            "tokenMessengerWithFees": "0x71f54F818671cD0D7ea140Da213e5C8b5C92a408",
+            "executorChain": "arc"
+          },
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+            }
+          }
+        }
+      }
+    }
+  }
+}

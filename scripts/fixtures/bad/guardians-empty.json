@@ -1,0 +1,1 @@
+{"_expect": "guardians must name 1 to 16 operators, or be omitted", "network": "testnet", "version": 1, "guardians": []}

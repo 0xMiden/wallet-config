@@ -1,0 +1,1 @@
+{"_expect": "guardians[0].endpoint must use https:", "network": "testnet", "version": 1, "guardians": [{"id": "open-zeppelin", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST", "endpoint": "http://guardian-testnet.openzeppelin.com"}]}
