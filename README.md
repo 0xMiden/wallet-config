@@ -14,10 +14,12 @@ New Bread mini-app registration targets this repository through a reviewed PR
 process. See [Mini-app registration](docs/mini-app-registration.md) for the
 candidate metadata, game/finance acceptance evidence, review and activation steps.
 
-The released Bread 1.17.3 Explore reader still uses `0xMiden/wallet-explore`.
-The catalog schema, migration and matching reader release must be established
-before a registration change here can make an app visible. Do not insert guessed
-app fields into the bridge/swap documents below; unknown fields are ignored.
+Explore catalogs live separately in `explore/<network>.json`, with icons under
+`explore/icons/`. See [Explore catalog](docs/explore-catalog.md) for fields,
+validation, publishing and migration. The matching reader is in
+[wallet PR #1512](https://github.com/0xMiden/wallet/pull/1512).
+Released readers still use `0xMiden/wallet-explore` until that wallet update ships.
+Do not put app fields into the root bridge/swap documents; those readers ignore them.
 
 ## Bridge configuration
 

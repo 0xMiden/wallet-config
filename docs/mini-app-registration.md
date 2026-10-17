@@ -8,22 +8,22 @@ Registration is a review and catalog workflow. It is separate from a hosted demo
 build completion, pilot approval, public listing and user wallet permissions.
 There is no registration API supplied by the wallet adapter.
 
-## Current activation gate
+## Catalog and activation gate
 
 Bread 1.17.3's [Explore reader](https://github.com/0xMiden/wallet/blob/v1.17.3/src/lib/explore-config/source.ts)
 still loads per-network catalogs from [wallet-explore](https://github.com/0xMiden/wallet-explore).
-This repository currently validates bridge, swap and onboarding configuration;
-it has no accepted mini-app catalog schema or file layout.
+This PR adds the compatible catalog at `explore/<network>.json`, its icons and a
+validator. See [Explore catalog](explore-catalog.md) for the exact schema and
+publication rules. Existing devnet and testnet entries are migrated unchanged.
+The matching reader is in [wallet PR #1512](https://github.com/0xMiden/wallet/pull/1512).
+Catalog publication here reaches only wallets released with that reader; merging
+these files alone does not move existing wallets off wallet-explore.
 
-Before encoding or activating an app registration here, maintainers must establish
-the catalog layout/validator, migrate existing catalog entries, and release the
-matching reader. Keep a candidate's metadata and evidence ready for review while
-activation is blocked. Do not add an invented `apps` field, endpoint or category
-to a current network document: an ignored field cannot register an app, and an
-unsupported catalog value can make a wallet retain its previous catalog.
-
-This guide documents the intended registration process. It adds no catalog data,
-runtime parser, submission service, wallet release or automatic approval.
+Register a reviewed app by editing the appropriate Explore catalog and bumping
+its version. Do not add an `apps` field to the root bridge/swap documents, or use
+the visible Finance/Arcade/Others labels as serialized categories. An unavailable
+production URL belongs in the candidate record, not in an active catalog item.
+There is no registration API, automatic approval or leaderboard submission service.
 
 ## Prepare the candidate
 
@@ -46,9 +46,8 @@ Collect these facts before opening the catalog registration PR:
 | Acceptance | Successful core journey, refusal, unsupported capabilities, account/network changes, repeated taps, timeout/reload and recovery evidence. |
 | Operations | Reachable maintainer, incident/support and rollback route, applicable privacy/terms and unresolved gates. |
 
-Use the accepted catalog validator for field limits and paths. The current
-wallet-explore schema is a compatibility reference, not permission to invent
-this repository's future catalog layout.
+Use `node scripts/validate-explore.mjs` for field limits, network, version and icon
+checks. The schema preserves wallet-explore compatibility; see the catalog guide.
 
 ## Games, finance and the native Arcade direction
 
@@ -65,9 +64,12 @@ entries, network selection, search, recents and platform gates. Review utility
 classification into Finance or Others; do not change serialized values ahead of
 their parser. Target tabs do not establish new JSON fields.
 
-Games must describe deterministic scoring, any public result data and the reviewed
-challenge protocol they use. Record/shot notes, common Game Coin, shared ranking,
-prizes and reward eligibility are separate unresolved product/contract decisions.
+Games must describe their own scoring, any public result data and any reviewed
+challenge protocol they use. Game-specific rankings belong to the game. The native
+wallet's intended shared ranking uses only GC balances that players explicitly
+choose to submit. The GC asset, private-balance verification and submission
+service are not supplied by this catalog migration. Record/shot notes, prizes
+and reward eligibility remain separate product/contract decisions.
 A valid replay does not prove human play. Label fixture rankings, fictional
 challenges and browser-local submission drafts clearly.
 
@@ -86,8 +88,8 @@ private-data permission and transaction approval remain separate.
 ## Review and activation
 
 1. Record the candidate and assemble the metadata and test evidence above.
-2. Confirm the accepted catalog schema, migration and reader-release plan. Keep
-   activation explicitly blocked when these are absent.
+2. Confirm the catalog schema and the matching reader-release plan. Keep activation
+   blocked on platforms that still read wallet-explore.
 3. Open a registration PR against `main` with the accepted catalog changes,
    localization/icon/placement, required version bump and validation evidence.
    Preserve unrelated network configuration. Link the candidate record.
