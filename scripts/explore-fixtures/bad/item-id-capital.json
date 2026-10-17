@@ -1,0 +1,1 @@
+{"_expect":"items[0].id must match ^[a-z0-9-]+$","network":"testnet","version":1,"items":[{"id":"Faucet","name":{"en":"Faucet"},"tagline":{"en":"Get testnet tokens"},"url":"https://faucet.example/","category":"tools","isExchange":false}],"sections":[]}

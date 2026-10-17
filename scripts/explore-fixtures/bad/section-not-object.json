@@ -1,0 +1,1 @@
+{"_expect":"sections[0] must be an object","network":"testnet","version":1,"items":[{"id":"faucet","name":{"en":"Faucet"},"tagline":{"en":"Get testnet tokens"},"url":"https://faucet.example/","category":"tools","isExchange":false}],"sections":["featured"]}

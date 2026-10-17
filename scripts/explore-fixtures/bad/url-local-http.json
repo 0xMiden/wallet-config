@@ -1,0 +1,1 @@
+{"_expect":"items[0].url must use https:","network":"testnet","version":1,"items":[{"id":"faucet","name":{"en":"Faucet"},"tagline":{"en":"Get testnet tokens"},"url":"http://127.0.0.1:4173/","category":"tools","isExchange":false}],"sections":[{"id":"featured","kind":"featured","title":{"en":"Featured"},"itemIds":["faucet"]}]}

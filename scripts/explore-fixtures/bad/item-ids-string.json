@@ -1,0 +1,1 @@
+{"_expect":"sections[0].itemIds must be an array of item ids","network":"testnet","version":1,"items":[{"id":"faucet","name":{"en":"Faucet"},"tagline":{"en":"Get testnet tokens"},"url":"https://faucet.example/","category":"tools","isExchange":false}],"sections":[{"id":"featured","kind":"featured","title":{"en":"Featured"},"itemIds":"faucet"}]}

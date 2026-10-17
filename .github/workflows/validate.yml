@@ -27,7 +27,11 @@ jobs:
         with:
           node-version: 22
       - name: Test the validator
-        run: node --test scripts/validate.test.mjs
+        run: node --test scripts/validate.test.mjs scripts/validate-explore.test.mjs
+      - name: Validate Explore catalogs and icons
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+        run: node scripts/validate-explore.mjs
       - name: Validate the documents
         env:
           BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}

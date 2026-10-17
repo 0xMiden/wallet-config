@@ -1,0 +1,1 @@
+{"_expect":"items[0].name.en is longer than 40 characters","network":"testnet","version":1,"items":[{"id":"faucet","name":{"en":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"tagline":{"en":"Get testnet tokens"},"url":"https://faucet.example/","category":"tools","isExchange":false}],"sections":[{"id":"featured","kind":"featured","title":{"en":"Featured"},"itemIds":["faucet"]}]}

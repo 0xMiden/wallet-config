@@ -1,0 +1,1 @@
+{"_expect":"items[0].name.de must be a non-empty string","network":"testnet","version":1,"items":[{"id":"faucet","name":{"en":"Faucet","de":3},"tagline":{"en":"Get testnet tokens"},"url":"https://faucet.example/","category":"tools","isExchange":false}],"sections":[{"id":"featured","kind":"featured","title":{"en":"Featured"},"itemIds":["faucet"]}]}

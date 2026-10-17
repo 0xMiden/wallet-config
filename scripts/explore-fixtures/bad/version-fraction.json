@@ -1,0 +1,1 @@
+{"_expect":"version must be a positive safe integer","network":"testnet","version":1.5,"items":[{"id":"faucet","name":{"en":"Faucet"},"tagline":{"en":"Get testnet tokens"},"url":"https://faucet.example/","category":"tools","isExchange":false}],"sections":[{"id":"featured","kind":"featured","title":{"en":"Featured"},"itemIds":["faucet"]}]}

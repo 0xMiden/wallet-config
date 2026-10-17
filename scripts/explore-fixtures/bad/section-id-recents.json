@@ -1,0 +1,1 @@
+{"_expect":"sections[0].id \"recents\" is reserved for a section the wallet adds","network":"testnet","version":1,"items":[{"id":"faucet","name":{"en":"Faucet"},"tagline":{"en":"Get testnet tokens"},"url":"https://faucet.example/","category":"tools","isExchange":false}],"sections":[{"id":"recents","kind":"featured","title":{"en":"Featured"},"itemIds":["faucet"]}]}
