@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 2,
+  "version": 3,
   "guardians": [
     {
       "id": "lambda-class",
@@ -19,6 +19,9 @@
     "bridgeOut": true
   },
   "bridge-providers": {
+    "agglayer": {
+      "indexerUrl": "https://bridge-cedar-miden.eu-north-3.gateway.fm/api"
+    },
     "usdcx": {
       "midenDomain": 10007,
       "attestationUrl": "https://xreserve-api.circle.com",
@@ -52,6 +55,12 @@
     "ethereum": {
       "chainId": 1,
       "bridges": {
+        "agglayer": {
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "contractAddress": "0x2a3dd3eb832af982ec71669e178424b10dca2ede",
+          "midenBridgeId": "0x69980662db6f43915a1f4750adabd3"
+        },
         "usdcx": {
           "domain": 0,
           "deposit": {
