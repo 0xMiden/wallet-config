@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 12,
+  "version": 13,
   "evm": {
     "chainId": 11155111
   },
@@ -188,6 +188,16 @@
           }
         }
       }
+    }
+  },
+  "onramp": {
+    "chainId": 11155111,
+    "calibur": {
+      "address": "0x00000cAbFc76478C1537dd418aB00967cBbE4AE6",
+      "runtimeHash": "0xd8f2157116f6901840d009511732cb247c1ced614af48351f1c1e5d52deea1eb",
+      "domainName": "Calibur",
+      "domainVersion": "1.0.0",
+      "batchTtlSeconds": 86400
     }
   }
 }

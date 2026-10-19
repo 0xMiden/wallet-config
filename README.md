@@ -129,6 +129,31 @@ ignore the field and keep their own list.
 
 A Guardian has no switch: list an operator only when its endpoint is live.
 
+## Fiat on-ramp
+
+`onramp` is optional. It names the EIP-7702 smart-account implementation that
+the fiat on-ramp and off-ramp relay use (Uniswap Calibur v1.1.0). The user's EVM
+address delegates to it, the wallet signs EIP-712 batches in its domain, and the
+backend relays them. The wallet and the backend both read this section. Absent
+means the network has no on-ramp: devnet and mainnet do not set it.
+
+| Field                     | Meaning                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `chainId`                 | The EVM chain that the relay runs on, and the chain of the EIP-712 domain. It must be the `chainId` of a `supportedEvmChains` entry. |
+| `calibur.address`         | The Calibur implementation that the user's address delegates to.                                                                     |
+| `calibur.runtimeHash`     | The keccak256 of the deployed Calibur runtime code. The backend checks it before each prepare and relay.                             |
+| `calibur.domainName`      | The EIP-712 domain name.                                                                                                             |
+| `calibur.domainVersion`   | The EIP-712 domain version.                                                                                                          |
+| `calibur.batchTtlSeconds` | How long a signed batch stays valid: the batch deadline is at most this many seconds away.                                           |
+
+Every field is required. `chainId` and `batchTtlSeconds` are positive integers.
+The address has 20 bytes, and the runtime hash has 32 bytes. The domain name and
+version are 1 to 32 characters with no control character and no space at either
+end.
+
+The wallet builds the signed batch and the backend checks it, so change these
+values only together with a wallet build and a backend release that expect them.
+
 ## Validation and publication
 
 Use Node 22:
@@ -143,6 +168,10 @@ The final command checks contracts on each enabled route's chain and shared
 service health. Executor deposits also check the target contracts when its new
 transfer switches are off. It does not check Miden faucets or Circle service
 responses. Check these values before publication.
+
+The on-ramp has no switch, so the final command always checks it when it is set:
+the Calibur address must have code. It does not check the Calibur runtime hash.
+Check that value before publication.
 
 The final command also asks every listed Guardian for its key
 (`GET <endpoint>/pubkey?scheme=ecdsa`, the request the wallet makes). An
