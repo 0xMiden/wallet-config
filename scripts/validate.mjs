@@ -39,6 +39,8 @@ export const MAX_GUARDIAN_ABOUT_LENGTH = 160;
 export const MAX_GUARDIAN_KIND_LENGTH = 64;
 /** Ids the wallet gives its own entries: the developer's custom endpoint and the no-Guardian choice. */
 export const RESERVED_GUARDIAN_IDS = ["custom", "no-guardian"];
+/** The longest on-ramp text: the Calibur EIP-712 domain name and version. */
+export const MAX_ONRAMP_TEXT_LENGTH = 32;
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
@@ -49,6 +51,8 @@ const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
 const GUARDIAN_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // A Guardian's key commitment as `GET /pubkey` serves it: a 32-byte 0x word.
 const GUARDIAN_COMMITMENT = /^0x[0-9a-fA-F]{64}$/;
+// A keccak256 hash, such as the Calibur runtime code hash: a 32-byte 0x word.
+const BYTES32 = /^0x[0-9a-fA-F]{64}$/;
 // C0 controls, DEL and C1 controls: none belongs in a line of text the wallet shows.
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
 
@@ -352,6 +356,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     typeof onboarding.inviteOnly !== "boolean"
   )
     errors.push("onboarding.inviteOnly must be boolean");
+  const onramp = readOnramp(body.onramp, chains, errors);
   return {
     config: errors.length
       ? null
@@ -364,9 +369,87 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           mainnetCountdown: readCountdown(body.mainnetCountdown),
           onboarding,
           ...(guardians === undefined ? {} : { guardians }),
+          ...(onramp === undefined ? {} : { onramp }),
         },
     errors,
     dropped,
+  };
+}
+
+/**
+ * The EIP-7702 Calibur smart account that the fiat on-ramp and off-ramp relay use. The user's EVM
+ * address delegates to it, the wallet signs EIP-712 batches in its domain, and the backend relays
+ * them. Both read this section. Absent means the network has no on-ramp. `chainId` is the chain the
+ * relay runs on and the EIP-712 domain chain; it must be the `chainId` of a `supportedEvmChains`
+ * entry. Every field is required, and a bad field rejects the document.
+ */
+function readOnramp(value, chains, errors) {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    errors.push("onramp must be an object");
+    return undefined;
+  }
+  const { chainId } = value;
+  if (!Number.isSafeInteger(chainId) || chainId < 1)
+    errors.push("onramp.chainId must be a positive integer");
+  else if (
+    !Object.values(chains).some(
+      (entry) => isRecord(entry) && entry.chainId === chainId,
+    )
+  )
+    errors.push(
+      "onramp.chainId must be the chainId of a supportedEvmChains entry",
+    );
+
+  const calibur = isRecord(value.calibur) ? value.calibur : {};
+  if (!isRecord(value.calibur)) errors.push("onramp.calibur must be an object");
+  const address = readPattern(
+    calibur,
+    "onramp.calibur",
+    "address",
+    EVM_ADDRESS,
+    "a 20-byte 0x address",
+    errors,
+  );
+  if (address === undefined && calibur.address === undefined)
+    errors.push("onramp.calibur.address is required");
+  const runtimeHash = readPattern(
+    calibur,
+    "onramp.calibur",
+    "runtimeHash",
+    BYTES32,
+    "a 32-byte 0x hash",
+    errors,
+  );
+  if (runtimeHash === undefined && calibur.runtimeHash === undefined)
+    errors.push("onramp.calibur.runtimeHash is required");
+  const domainName = readGuardianLabel(
+    calibur,
+    "onramp.calibur",
+    "domainName",
+    errors,
+    MAX_ONRAMP_TEXT_LENGTH,
+  );
+  const domainVersion = readGuardianLabel(
+    calibur,
+    "onramp.calibur",
+    "domainVersion",
+    errors,
+    MAX_ONRAMP_TEXT_LENGTH,
+  );
+  const { batchTtlSeconds } = calibur;
+  if (!Number.isSafeInteger(batchTtlSeconds) || batchTtlSeconds < 1)
+    errors.push("onramp.calibur.batchTtlSeconds must be a positive integer");
+
+  return {
+    chainId,
+    calibur: {
+      address,
+      runtimeHash,
+      domainName,
+      domainVersion,
+      batchTtlSeconds,
+    },
   };
 }
 
@@ -756,6 +839,14 @@ export function plannedChecks(config, { publishedGuardians = [] } = {}) {
       `${providers.epoch.positionsUrl}/health`,
       (body) => body?.ok === true,
     );
+  }
+  // The on-ramp has no switch, so its Calibur contract is checked whenever the section is set. The
+  // runtime hash is not checked: Node has no keccak256.
+  const onramp = config.onramp;
+  if (onramp !== undefined) {
+    const { chainId } = onramp;
+    add({ key: `chain:${chainId}`, kind: "evm-chain", chainId });
+    code(chainId, onramp.calibur.address, "on-ramp Calibur");
   }
   return [...checks.values()];
 }

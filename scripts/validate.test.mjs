@@ -129,6 +129,8 @@ test("duplicate chain keys are detected before JSON loses them", async () => {
 });
 test("smoke checks use the route chain and skip disabled routes", async () => {
   const body = withoutGuardians();
+  // The on-ramp has no switch: its own test below covers its checks.
+  delete body.onramp;
   body.features.earn = false;
   for (const chain of Object.values(body.supportedEvmChains))
     for (const bridge of Object.values(chain.bridges)) {
@@ -468,6 +470,91 @@ test("reads the Guardian endpoints the base document lists, and none from a base
     [],
   );
   assert.deepEqual(publishedGuardianEndpoints(base, "devnet"), []);
+});
+
+const CALIBUR = "0x00000cabfc76478c1537dd418ab00967cbbe4ae6";
+const onrampFixture = () =>
+  parseBridgeConfig(readFixture("good", "testnet-onramp.json"), "testnet");
+
+/** A fake Sepolia whose Calibur address has the code `code`. */
+function sepoliaWorld(code) {
+  return async (url, init) => {
+    const { method, params } = JSON.parse(init.body);
+    switch (method) {
+      case "eth_chainId":
+        return Response.json({ result: "0xaa36a7" });
+      case "eth_getCode":
+        assert.equal(params[0], CALIBUR);
+        return Response.json({ result: code });
+      default:
+        throw new Error(`unexpected ${method}`);
+    }
+  };
+}
+
+test("reads no on-ramp section from a document that has none", () => {
+  const config = parseBridgeConfig(
+    readFixture("good", "testnet-minimal.json"),
+    "testnet",
+  );
+  assert.equal("onramp" in config, false);
+});
+
+test("reads the on-ramp section with its address and hash in lower case", () => {
+  assert.deepEqual(onrampFixture().onramp, {
+    chainId: 11155111,
+    calibur: {
+      address: CALIBUR,
+      runtimeHash:
+        "0xd8f2157116f6901840d009511732cb247c1ced614af48351f1c1e5d52deea1eb",
+      domainName: "Calibur",
+      domainVersion: "1.0.0",
+      batchTtlSeconds: 86400,
+    },
+  });
+});
+
+test("refuses an on-ramp chain that no supportedEvmChains entry has", () => {
+  const body = readFixture("good", "testnet-onramp.json");
+  body.supportedEvmChains.sepolia.chainId = 84532;
+  assert.ok(
+    errors(body).includes(
+      "onramp.chainId must be the chainId of a supportedEvmChains entry",
+    ),
+  );
+});
+
+test("reports the reason each bad on-ramp fixture names", () => {
+  const root = new URL("./fixtures/bad/", import.meta.url);
+  for (const name of readdirSync(root).filter((file) =>
+    file.startsWith("onramp-"),
+  )) {
+    const { _expect, ...body } = readFixture("bad", name);
+    assert.ok(errors(body).includes(_expect), `${name}: ${errors(body)}`);
+  }
+});
+
+test("plans the Calibur code check on the on-ramp chain with every switch off", () => {
+  const config = onrampFixture();
+  config.supportedEvmChains.sepolia.bridges.agglayer.depositEnabled = false;
+  config.supportedEvmChains.sepolia.bridges.agglayer.withdrawalEnabled = false;
+  assert.deepEqual(
+    plannedChecks(config).map(({ key }) => key),
+    ["chain:11155111", `code:11155111:${CALIBUR}`],
+  );
+});
+
+test("passes a Calibur address that has code and fails one that has none", async () => {
+  const config = onrampFixture();
+  config.supportedEvmChains.sepolia.bridges.agglayer.depositEnabled = false;
+  config.supportedEvmChains.sepolia.bridges.agglayer.withdrawalEnabled = false;
+  const passed = await smokeTest(config, sepoliaWorld("0x6080"));
+  assert.ok(passed.every((result) => result.ok));
+  const failed = await smokeTest(config, sepoliaWorld("0x"));
+  assert.deepEqual(
+    failed.map((result) => result.ok),
+    [true, false],
+  );
 });
 
 test("refuses a document whose new Guardian operator is down and passes one whose listed operator is down", async () => {
