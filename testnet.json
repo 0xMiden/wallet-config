@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 10,
+  "version": 11,
   "evm": {
     "chainId": 11155111
   },
@@ -17,7 +17,7 @@
     "earnProtocol": "dummy-lending"
   },
   "mainnetCountdown": {
-    "enabled": false,
+    "enabled": true,
     "launchAt": "2026-10-26T16:00:00Z"
   },
   "onboarding": {
