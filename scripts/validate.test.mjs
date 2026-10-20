@@ -87,7 +87,7 @@ test("bad route data rejects the document", async (t) => {
       b.supportedEvmChains.sepolia.bridges.agglayer.tokens = [];
     },
     (b) => {
-      b.supportedEvmChains.sepolia.bridges.agglayer.tokens.TRNSK.contractAddress =
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokens.USDC.contractAddress =
         "0x1";
     },
     (b) => {

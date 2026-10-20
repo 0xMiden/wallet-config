@@ -166,9 +166,6 @@
           "tokens": {
             "USDC": {
               "contractAddress": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69"
-            },
-            "TRNSK": {
-              "contractAddress": "0x0c86a754a29714c4fe9c6f1359fa7099ed174c0b"
             }
           }
         }
