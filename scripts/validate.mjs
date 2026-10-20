@@ -169,8 +169,7 @@ function geoPlace(phrase) {
   const text = phrase.trim().replace(/\s+/g, " ").toLowerCase();
   if (!text.startsWith("block ")) return undefined;
   const place = text.slice("block ".length);
-  const alias = GEO_ALIASES[place];
-  if (alias) return alias;
+  if (Object.hasOwn(GEO_ALIASES, place)) return GEO_ALIASES[place];
   if (/^[a-z]{2}$/.test(place)) return place.toUpperCase();
   const subdivision = /^([a-z]{2})-([a-z0-9]{1,3})$/.exec(place);
   if (!subdivision) return undefined;
@@ -1098,6 +1097,15 @@ export async function validateFile(
     ...countdownErrors(body),
     ...duplicateKeys(text, ["supportedEvmChains"]).map(
       (key) => `supportedEvmChains repeats ${key}`,
+    ),
+    ...duplicateKeys(text, []).filter((key) => key === "geo").map(
+      (key) => `document repeats ${key}`,
+    ),
+    ...duplicateKeys(text, ["geo"]).map((key) => `geo repeats ${key}`),
+    ...GEO_FEATURES.flatMap((feature) =>
+      duplicateKeys(text, ["geo", feature]).map(
+        (key) => `geo.${feature} repeats ${key}`,
+      ),
     ),
   );
   const base = baseText(baseRef, file, root);
