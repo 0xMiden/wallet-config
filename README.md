@@ -83,8 +83,16 @@ and `withdrawalEnabled` booleans. A missing bridge is unavailable.
 | Bridge     | Route fields                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------- |
 | `epoch`    | `tokens.USDC.contractAddress`; optional `tokens.USDC.outputs` lists provider output names |
-| `agglayer` | `contractAddress`, `midenBridgeId`                                                        |
+| `agglayer` | `contractAddress`, `midenBridgeId`; optional `tokens.<SYMBOL>.contractAddress`            |
 | `usdcx`    | `domain`, `tokens.USDC.contractAddress`, optional `deposit`, optional `executor`          |
+
+Agglayer `tokens` lists the ERC-20 source tokens the wallet offers for a deposit,
+keyed by the symbol the picker shows (upper-case letters and digits, at most 11).
+Native ETH is never listed: the wallet finds it in the Miden bridge's faucet
+registry. That registry is the trust source for every listed token: the wallet
+offers a token only when the registry holds a faucet for its contract address,
+and takes the token's decimals and symbol from the contract. A listed token the
+registry does not hold is dropped, so list a token once its faucet is registered.
 
 A USDCx `deposit` is one of these forms:
 

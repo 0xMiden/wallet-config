@@ -162,7 +162,15 @@
           "depositEnabled": true,
           "withdrawalEnabled": true,
           "contractAddress": "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
-          "midenBridgeId": "0x187cabbc404359d16be94954ca9879"
+          "midenBridgeId": "0x187cabbc404359d16be94954ca9879",
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69"
+            },
+            "TRNSK": {
+              "contractAddress": "0x0c86a754a29714c4fe9c6f1359fa7099ed174c0b"
+            }
+          }
         }
       }
     },
