@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 3,
+  "version": 4,
   "guardians": [
     {
       "id": "lambda-class",
@@ -10,6 +10,15 @@
       "endpoint": "https://guardian.cedar.internal.lambdaclass.com",
       "about": "LambdaClass, an engineering firm that builds zero-knowledge systems.",
       "kind": "Zero-knowledge systems engineering"
+    },
+    {
+      "id": "kodax",
+      "name": "Koda",
+      "operatedBy": "Korea Digital Asset (Koda)",
+      "location": "Asia (SK)",
+      "endpoint": "https://guardian.kodax.com",
+      "about": "Korea Digital Asset, a digital asset custody company based in South Korea.",
+      "kind": "Digital asset custodian"
     }
   ],
   "features": {
