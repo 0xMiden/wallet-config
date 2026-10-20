@@ -113,6 +113,20 @@ test("geo rules name a feature and a place", () => {
   body.geo = { earn: { "block UK": true } };
   assert.ok(errors(body).some((error) => error.includes('must be "yes" or "no"')));
 });
+test("geo remains optional", () => {
+  const body = copy();
+  delete body.geo;
+  assert.deepEqual(errors(body), []);
+});
+test("geo rejects inherited alias names", async (t) => {
+  for (const feature of ["earn", "swap"])
+    for (const place of ["constructor", "__proto__"])
+      await t.test(`${feature}: ${place}`, () => {
+        const body = copy();
+        body.geo = { [feature]: { [`block ${place}`]: "yes" } };
+        assert.ok(errors(body).some((error) => error.includes("is not a place")));
+      });
+});
 test("executor target can have both new-start controls off", () => {
   const body = copy();
   const target = body.supportedEvmChains["arc-testnet"].bridges.usdcx;
