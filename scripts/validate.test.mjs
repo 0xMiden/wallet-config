@@ -137,6 +137,7 @@ test("geo rejects repeated raw keys before JSON loses them", async (t) => {
     ['"geo":{"swap":{"block UK":"yes"},"swap":{"block UK":"no"}}', "geo repeats swap"],
     ['"geo":{"earn":{"block UK":"yes","block UK":"no"}}', "geo.earn repeats block UK"],
     ['"geo":{"swap":{"block UK":"yes","block UK":"no"}}', "geo.swap repeats block UK"],
+    ['"geo":{"wallet":{"block CU":"yes","block CU":"no"}}', "geo.wallet repeats block CU"],
   ];
   const root = mkdtempSync(path.join(tmpdir(), "config-geo-test-"));
   try {
@@ -154,6 +155,23 @@ test("geo rejects repeated raw keys before JSON loses them", async (t) => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+test("published global wallet policy blocks every required jurisdiction", () => {
+  const expected = Object.fromEntries(
+    ["CU", "IR", "KP", "RU", "BY", "UA-43", "UA-40", "UA-14", "UA-09", "UA-65", "UA-23"]
+      .map((place) => [`block ${place}`, "yes"]),
+  );
+  for (const file of ["testnet.json", "devnet.json", "mainnet.json"]) {
+    const body = JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url)));
+    assert.deepEqual(body.geo?.wallet, expected, file);
+  }
+});
+test("geo wallet rules use the same validated place grammar", () => {
+  const body = copy();
+  body.geo = { wallet: { "block CU": "yes", "block UA-43": "yes" } };
+  assert.deepEqual(errors(body), []);
+  body.geo.wallet["block __proto__"] = "yes";
+  assert.ok(errors(body).some((error) => error.includes("is not a place")));
 });
 test("executor target can have both new-start controls off", () => {
   const body = copy();
