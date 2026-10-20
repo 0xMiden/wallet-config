@@ -993,7 +993,7 @@ export function publishedGuardianEndpoints(baseText, network) {
 }
 
 export function duplicateKeys(text, target) {
-  const duplicates = [];
+  const duplicates = new Set();
   let at = 0;
   const skipSpace = () => {
     while (at < text.length && " \t\n\r".includes(text[at])) at++;
@@ -1017,7 +1017,7 @@ export function duplicateKeys(text, target) {
         skipSpace();
         while (text[at] !== "}") {
           const key = readString();
-          if (watched && seen.has(key)) duplicates.push(key);
+          if (watched && seen.has(key)) duplicates.add(key);
           seen.add(key);
           skipSpace();
           at++; // the colon
@@ -1050,7 +1050,7 @@ export function duplicateKeys(text, target) {
     }
   };
   readValue([]);
-  return [...new Set(duplicates)];
+  return [...duplicates];
 }
 
 const REPO_ROOT = path.resolve(
