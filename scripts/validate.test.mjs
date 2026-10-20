@@ -173,6 +173,30 @@ test("geo wallet rules use the same validated place grammar", () => {
   body.geo.wallet["block __proto__"] = "yes";
   assert.ok(errors(body).some((error) => error.includes("is not a place")));
 });
+test("raw duplicate results stay unique across repeated keys and objects", () => {
+  for (const target of [[], ["geo"], ["geo", "wallet"], ["geo", "earn"], ["geo", "swap"], ["supportedEvmChains"]]) {
+    const wrap = (value) => target.reduceRight((text, key) => `{${JSON.stringify(key)}:${text}}`, value);
+    const first = wrap('{"b":0,"a":0,"b":1,"b":2}');
+    const second = wrap('{"a":0,"a":1,"b":0,"b":1}');
+    assert.deepEqual(duplicateKeys(first, target), ["b"]);
+    assert.deepEqual(duplicateKeys(`{${first.slice(1, -1)},${second.slice(1, -1)}}`, target), ["b", "a"]);
+  }
+});
+test("raw duplicate scans remain bounded for large geo objects", async (t) => {
+  const keys = Array.from({ length: 100000 }, (_, index) =>
+    `block ${String.fromCharCode(65 + Math.floor(index / 46656))}A-${(index % 46656).toString(36).padStart(3, "0")}`,
+  );
+  const entries = keys.flatMap((key) => [`${JSON.stringify(key)}:"yes"`, `${JSON.stringify(key)}:"no"`]).join(",");
+  for (const target of [["geo", "earn"], ["geo", "swap"], ["supportedEvmChains"]])
+    await t.test(target.join("."), () => {
+      const text = target.reduceRight((value, key) => `{${JSON.stringify(key)}:${value}}`, `{${entries}}`);
+      const start = performance.now();
+      const duplicates = duplicateKeys(text, target);
+      const elapsed = performance.now() - start;
+      assert.deepEqual(duplicates, keys);
+      assert.ok(elapsed < 5000, `duplicate scan exceeded5000ms: ${Math.round(elapsed)}ms`);
+    });
+});
 test("executor target can have both new-start controls off", () => {
   const body = copy();
   const target = body.supportedEvmChains["arc-testnet"].bridges.usdcx;
