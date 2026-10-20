@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 4,
+  "version": 5,
   "guardians": [
     {
       "id": "lambda-class",
@@ -26,6 +26,12 @@
     "fastBridge": false,
     "bridgeIn": true,
     "bridgeOut": true
+  },
+  "geo": {
+    "earn": {
+      "block NY state": "yes",
+      "block UK": "yes"
+    }
   },
   "bridge-providers": {
     "agglayer": {

@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 12,
+  "version": 13,
   "evm": {
     "chainId": 11155111
   },
@@ -66,6 +66,12 @@
     "fastBridge": true,
     "bridgeIn": true,
     "bridgeOut": true
+  },
+  "geo": {
+    "earn": {
+      "block NY state": "yes",
+      "block UK": "yes"
+    }
   },
   "bridge-providers": {
     "epoch": {

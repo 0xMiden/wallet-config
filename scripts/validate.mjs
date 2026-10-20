@@ -153,6 +153,65 @@ function readUrl(section, label, field, allowLocalHttp, errors) {
 }
 
 /**
+ * Place rules. Unknown phrases and features are errors here; the wallet skips a phrase or feature
+ * it does not know yet. Same phrases as `src/lib/remote-config/geo.ts` in the wallet.
+ */
+const GEO_FEATURES = ["earn", "swap"];
+const GEO_ALIASES = {
+  "ny state": "US-NY",
+  "new york": "US-NY",
+  uk: "GB",
+  "united kingdom": "GB",
+  "great britain": "GB",
+};
+
+function geoPlace(phrase) {
+  const text = phrase.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!text.startsWith("block ")) return undefined;
+  const place = text.slice("block ".length);
+  const alias = GEO_ALIASES[place];
+  if (alias) return alias;
+  if (/^[a-z]{2}$/.test(place)) return place.toUpperCase();
+  const subdivision = /^([a-z]{2})-([a-z0-9]{1,3})$/.exec(place);
+  if (!subdivision) return undefined;
+  return `${subdivision[1].toUpperCase()}-${subdivision[2].toUpperCase()}`;
+}
+
+function geoErrors(body, errors) {
+  if (body.geo === undefined) return;
+  if (!isRecord(body.geo)) {
+    errors.push("geo must be an object");
+    return;
+  }
+  for (const [feature, rules] of Object.entries(body.geo)) {
+    const label = `geo.${feature}`;
+    if (!GEO_FEATURES.includes(feature)) {
+      errors.push(`${label} is not a feature`);
+      continue;
+    }
+    if (!isRecord(rules)) {
+      errors.push(`${label} must be an object`);
+      continue;
+    }
+    const seen = new Set();
+    for (const [phrase, answer] of Object.entries(rules)) {
+      const rule = `${label}.${JSON.stringify(phrase)}`;
+      if (answer !== "yes" && answer !== "no") {
+        errors.push(`${rule} must be "yes" or "no"`);
+        continue;
+      }
+      const place = geoPlace(phrase);
+      if (place === undefined) {
+        errors.push(`${rule} is not a place`);
+        continue;
+      }
+      if (seen.has(place)) errors.push(`${label} names ${place} twice`);
+      seen.add(place);
+    }
+  }
+}
+
+/**
  * The wallet's `parseBridgeConfig`, with the reasons it rejects and the values it drops.
  * `config` is null exactly when the wallet would ignore the document.
  */
@@ -352,6 +411,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     typeof onboarding.inviteOnly !== "boolean"
   )
     errors.push("onboarding.inviteOnly must be boolean");
+  geoErrors(body, errors);
   return {
     config: errors.length
       ? null

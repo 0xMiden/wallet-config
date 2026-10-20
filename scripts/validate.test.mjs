@@ -32,7 +32,7 @@ const withoutGuardians = () => {
 };
 const errors = (body) => parseBridgeConfigDetailed(body, "testnet").errors;
 test("published documents use the new schema", async () => {
-  for (const file of ["testnet.json", "devnet.json"])
+  for (const file of ["testnet.json", "devnet.json", "mainnet.json"])
     assert.deepEqual((await validateFile(file, { smoke: false })).errors, []);
 });
 test("bad route data rejects the document", async (t) => {
@@ -96,6 +96,22 @@ test("mainnet Epoch does not need a testnet faucet or market", () => {
   delete body["bridge-providers"].epoch.outputs;
   delete body.supportedEvmChains.sepolia.bridges.epoch.tokens.USDC.outputs;
   assert.deepEqual(errors(body), []);
+});
+test("geo rules name a feature and a place", () => {
+  const body = copy();
+  body.geo = {
+    earn: { "block NY state": "yes", "block UK": "yes", "block US-CA": "no" },
+    swap: { "block DE": "no" },
+  };
+  assert.deepEqual(errors(body), []);
+  body.geo.earn["block New York"] = "yes";
+  assert.ok(errors(body).some((error) => error.includes("names US-NY twice")));
+  body.geo = { bridgeIn: { "block UK": "yes" } };
+  assert.ok(errors(body).some((error) => error.includes("geo.bridgeIn is not a feature")));
+  body.geo = { earn: { "block Narnia": "yes" } };
+  assert.ok(errors(body).some((error) => error.includes("is not a place")));
+  body.geo = { earn: { "block UK": true } };
+  assert.ok(errors(body).some((error) => error.includes('must be "yes" or "no"')));
 });
 test("executor target can have both new-start controls off", () => {
   const body = copy();

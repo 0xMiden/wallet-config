@@ -18,6 +18,28 @@ and withdrawals. A false global switch disables new transfers even when a chain
 route is enabled. When a bridge switch is omitted, the per-chain switches apply.
 The wallet gets Earn markets from Epoch. This document does not configure markets.
 
+`geo` is optional. It blocks starting a feature from a place. A missing section
+blocks nothing. Each feature is `earn` or `swap`. Each rule is a phrase and
+`"yes"` or `"no"`. `"yes"` blocks that place. `"no"` names a place and does not
+block it. A phrase is `block` plus a place: `NY state`, `New York`, `UK`,
+`United Kingdom`, or `Great Britain`, or an ISO country (`DE`, `GB`) or
+subdivision (`US-NY`, `US-CA`). The same place named twice is refused. A feature
+or phrase outside this list is refused. Older wallets ignore a feature or phrase
+they do not know. These rules stop a new Earn deposit or a new swap. They do
+not stop an Earn withdrawal.
+
+```json
+"geo": {
+  "earn": {
+    "block NY state": "yes",
+    "block UK": "yes"
+  },
+  "swap": {
+    "block US-CA": "no"
+  }
+}
+```
+
 `bridge-providers` holds shared services:
 
 | Provider   | Fields                                             |

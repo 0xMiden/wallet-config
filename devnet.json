@@ -1,7 +1,13 @@
 {
   "network": "devnet",
-  "version": 3,
+  "version": 4,
   "features": { "earn": false, "fastBridge": false, "bridgeIn": false, "bridgeOut": false },
+  "geo": {
+    "earn": {
+      "block NY state": "yes",
+      "block UK": "yes"
+    }
+  },
   "onboarding": { "inviteOnly": false },
   "guardians": [
     { "id": "open-zeppelin", "name": "OpenZeppelin", "operatedBy": "OpenZeppelin", "location": "US-EAST", "endpoint": "https://guardian-devnet.openzeppelin.com", "about": "OpenZeppelin, a smart contract security company known for its audits.", "kind": "Smart contract security and audits" }
