@@ -1017,8 +1017,7 @@ export function duplicateKeys(text, target) {
         skipSpace();
         while (text[at] !== "}") {
           const key = readString();
-          if (watched && seen.has(key) && !duplicates.includes(key))
-            duplicates.push(key);
+          if (watched && seen.has(key)) duplicates.push(key);
           seen.add(key);
           skipSpace();
           at++; // the colon
@@ -1051,7 +1050,7 @@ export function duplicateKeys(text, target) {
     }
   };
   readValue([]);
-  return duplicates;
+  return [...new Set(duplicates)];
 }
 
 const REPO_ROOT = path.resolve(
