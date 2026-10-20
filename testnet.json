@@ -68,6 +68,19 @@
     "bridgeOut": true
   },
   "geo": {
+    "wallet": {
+      "block CU": "yes",
+      "block IR": "yes",
+      "block KP": "yes",
+      "block RU": "yes",
+      "block BY": "yes",
+      "block UA-43": "yes",
+      "block UA-40": "yes",
+      "block UA-14": "yes",
+      "block UA-09": "yes",
+      "block UA-65": "yes",
+      "block UA-23": "yes"
+    },
     "earn": {
       "block NY state": "yes",
       "block UK": "yes"

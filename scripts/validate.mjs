@@ -156,7 +156,7 @@ function readUrl(section, label, field, allowLocalHttp, errors) {
  * Place rules. Unknown phrases and features are errors here; the wallet skips a phrase or feature
  * it does not know yet. Same phrases as `src/lib/remote-config/geo.ts` in the wallet.
  */
-const GEO_FEATURES = ["earn", "swap"];
+const GEO_FEATURES = ["wallet", "earn", "swap"];
 const GEO_ALIASES = {
   "ny state": "US-NY",
   "new york": "US-NY",

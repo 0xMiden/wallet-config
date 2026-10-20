@@ -18,18 +18,38 @@ and withdrawals. A false global switch disables new transfers even when a chain
 route is enabled. When a bridge switch is omitted, the per-chain switches apply.
 The wallet gets Earn markets from Epoch. This document does not configure markets.
 
-`geo` is optional. It blocks starting a feature from a place. A missing section
-blocks nothing. Each feature is `earn` or `swap`. Each rule is a phrase and
-`"yes"` or `"no"`. `"yes"` blocks that place. `"no"` names a place and does not
-block it. A phrase is `block` plus a place: `NY state`, `New York`, `UK`,
-`United Kingdom`, or `Great Britain`, or an ISO country (`DE`, `GB`) or
-subdivision (`US-NY`, `US-CA`). The same place named twice is refused. A feature
-or phrase outside this list is refused. Older wallets ignore a feature or phrase
-they do not know. These rules stop a new Earn deposit or a new swap. They do
-not stop an Earn withdrawal.
+`geo` contains the `wallet`, `earn` and `swap` location rules. The schema permits
+omitting `geo` for older documents, but the eligibility service requires an explicit
+`geo.wallet` map before granting access. A global denial blocks the whole wallet,
+including withdrawals. An Earn or Swap rule blocks new operations in that feature;
+an Earn-only denial leaves withdrawals available.
+
+Each rule is `block` plus a place, with `"yes"` to block or `"no"` to leave it
+unblocked. Places are `NY state`, `New York`, `UK`, `United Kingdom`,
+`Great Britain`, an ISO country (`DE`, `GB`) or a subdivision (`US-NY`, `US-CA`).
+Unknown features, invalid phrases and repeated places are refused.
+
+All three published network documents block Cuba (`CU`), Iran (`IR`), North Korea
+(`KP`), Russia (`RU`), Belarus (`BY`), Crimea (`UA-43`), Sevastopol (`UA-40`),
+Donetsk (`UA-14`), Luhansk (`UA-09`), Kherson (`UA-65`) and Zaporizhzhia (`UA-23`).
+The whole four oblasts are blocked. The policy does not distinguish territorial
+control within an oblast. NY and UK remain separate Earn-only rules.
 
 ```json
 "geo": {
+  "wallet": {
+    "block CU": "yes",
+    "block IR": "yes",
+    "block KP": "yes",
+    "block RU": "yes",
+    "block BY": "yes",
+    "block UA-43": "yes",
+    "block UA-40": "yes",
+    "block UA-14": "yes",
+    "block UA-09": "yes",
+    "block UA-65": "yes",
+    "block UA-23": "yes"
+  },
   "earn": {
     "block NY state": "yes",
     "block UK": "yes"
@@ -39,6 +59,9 @@ not stop an Earn withdrawal.
   }
 }
 ```
+
+Older wallet versions that ignore `geo` gain the application gate only after
+updating. The service returns permission decisions, not the caller's location.
 
 `bridge-providers` holds shared services:
 
@@ -87,15 +110,15 @@ Source tokens belong to each bridge. There is no global EVM chain or USDC addres
 Chain order sets picker order. Do not sort the chain keys. Do not repeat keys:
 JSON parsing would discard the first value. Validation checks the source text.
 
-Direction switches control new transfers only. They must not block a claim,
-reclaim, Earn withdrawal, or recovery of an existing transfer. Existing transfers
-keep the data saved when they started.
+Direction switches control new transfers only. They leave claims, reclaims, Earn
+withdrawals and recovery available while the global wallet policy allows access.
+Existing transfers keep the data saved when they started.
 
 ## Other settings
 
 `swap`, `onboarding`, `mainnetCountdown`, and other unrelated sections remain in
 place. Swap requires an HTTPS `etaUrl` and at least two tokens when a token list
-is set. Each token needs a unique uppercase `symbol` (1–6 letters), a unique
+is set. Each token needs a unique uppercase `symbol` (1-6 letters), a unique
 15-byte `faucetId`, and integer `decimals` from 0 to 12. Optional `logo` values
 are `MIDEN`, `ETH`, `USDC`, and `BTC`. Optional `priceSymbol` values are `ETH`,
 `BTC`, and `USDC`.
