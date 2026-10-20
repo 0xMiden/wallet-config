@@ -127,6 +127,34 @@ test("geo rejects inherited alias names", async (t) => {
         assert.ok(errors(body).some((error) => error.includes("is not a place")));
       });
 });
+test("geo rejects repeated raw keys before JSON loses them", async (t) => {
+  const body = copy();
+  delete body.geo;
+  const prefix = JSON.stringify(body).slice(0, -1);
+  const cases = [
+    ['"geo":{},"geo":{"earn":{"block UK":"no"}}', "document repeats geo"],
+    ['"geo":{"earn":{"block UK":"yes"},"earn":{"block UK":"no"}}', "geo repeats earn"],
+    ['"geo":{"swap":{"block UK":"yes"},"swap":{"block UK":"no"}}', "geo repeats swap"],
+    ['"geo":{"earn":{"block UK":"yes","block UK":"no"}}', "geo.earn repeats block UK"],
+    ['"geo":{"swap":{"block UK":"yes","block UK":"no"}}', "geo.swap repeats block UK"],
+  ];
+  const root = mkdtempSync(path.join(tmpdir(), "config-geo-test-"));
+  try {
+    for (const [section, expected] of cases)
+      await t.test(expected, async () => {
+        writeFileSync(path.join(root, "testnet.json"), `${prefix},${section}}`);
+        const result = await validateFile("testnet.json", { root, smoke: false });
+        assert.ok(result.errors.includes(expected), JSON.stringify(result.errors));
+      });
+    writeFileSync(
+      path.join(root, "testnet.json"),
+      `${prefix},"geo":{"earn":{"block UK":"yes"},"swap":{"block UK":"no"}}}`,
+    );
+    assert.deepEqual((await validateFile("testnet.json", { root, smoke: false })).errors, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test("executor target can have both new-start controls off", () => {
   const body = copy();
   const target = body.supportedEvmChains["arc-testnet"].bridges.usdcx;
