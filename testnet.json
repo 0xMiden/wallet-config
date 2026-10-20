@@ -163,6 +163,7 @@
           "withdrawalEnabled": true,
           "contractAddress": "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
           "midenBridgeId": "0x187cabbc404359d16be94954ca9879",
+          "tokenApiUrl": "https://eth-sepolia.blockscout.com/api/v2",
           "tokens": {
             "USDC": {
               "contractAddress": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69"

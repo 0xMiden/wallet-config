@@ -99,6 +99,10 @@ test("bad route data rejects the document", async (t) => {
       const tokens = b.supportedEvmChains.sepolia.bridges.agglayer.tokens;
       tokens.USDT = { contractAddress: tokens.USDC.contractAddress };
     },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokenApiUrl =
+        "http://eth-sepolia.blockscout.com/api/v2";
+    },
   ];
   for (const [index, change] of cases.entries())
     await t.test(`rejects route mutation ${index + 1}`, () => {

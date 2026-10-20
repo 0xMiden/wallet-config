@@ -382,6 +382,9 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
         case "agglayer":
           required(bridge, "contractAddress", label, EVM_ADDRESS);
           required(bridge, "midenBridgeId", label, MIDEN_ACCOUNT_ID);
+          // A Blockscout API root that lists an address's ERC-20 holdings: on a test network the
+          // wallet offers the connected wallet's holdings through it, on top of `tokens`.
+          readUrl(bridge, label, "tokenApiUrl", options.allowLocalHttp === true, errors);
           // The ERC-20 source tokens the wallet offers for a deposit, keyed by symbol. Native ETH is
           // never listed: the wallet finds it in the Miden bridge's faucet registry, which also must
           // list each token here before the wallet offers it.
