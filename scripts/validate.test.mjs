@@ -164,6 +164,7 @@ test("published global wallet policy blocks every required jurisdiction", () => 
   for (const file of ["testnet.json", "devnet.json", "mainnet.json"]) {
     const body = JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url)));
     assert.deepEqual(body.geo?.wallet, expected, file);
+    assert.deepEqual(body.geo?.earn, { "block NY state": "yes", "block UK": "yes" }, file);
   }
 });
 test("geo wallet rules use the same validated place grammar", () => {
