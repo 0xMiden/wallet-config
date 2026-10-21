@@ -127,6 +127,12 @@ are `MIDEN`, `ETH`, `USDC`, and `BTC`. Optional `priceSymbol` values are `ETH`,
 boolean; when true, `launchAt` must be a valid UTC timestamp such as
 `2026-10-26T16:00:00Z`.
 
+`limits.bridgeInMaxBalanceUsd` is an optional number above zero: the most an
+account may hold, in US dollars, once a bridge-in lands. The wallet's deposit
+screen refuses a deposit that takes the receiving account's valued holdings past
+it. It is a gate on that screen only: a note that arrives any other way is not
+refused. A document with no `limits` section sets no ceiling.
+
 ## Guardian operators
 
 `guardians` is optional. It lists the Guardian operators of the network in

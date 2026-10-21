@@ -411,6 +411,14 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   )
     errors.push("onboarding.inviteOnly must be boolean");
   geoErrors(body, errors);
+  const limits = readSection(body, "limits", errors);
+  if (
+    limits.bridgeInMaxBalanceUsd !== undefined &&
+    (typeof limits.bridgeInMaxBalanceUsd !== "number" ||
+      !Number.isFinite(limits.bridgeInMaxBalanceUsd) ||
+      limits.bridgeInMaxBalanceUsd <= 0)
+  )
+    errors.push("limits.bridgeInMaxBalanceUsd must be a number above zero");
   return {
     config: errors.length
       ? null
@@ -422,6 +430,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           swap,
           mainnetCountdown: readCountdown(body.mainnetCountdown),
           onboarding,
+          limits,
           ...(guardians === undefined ? {} : { guardians }),
         },
     errors,
