@@ -1,6 +1,9 @@
 {
   "network": "mainnet",
-  "version": 5,
+  "version": 6,
+  "limits": {
+    "bridgeInMaxBalanceUsd": 1232.462
+  },
   "guardians": [
     {
       "id": "lambda-class",
