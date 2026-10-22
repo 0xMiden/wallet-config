@@ -39,6 +39,15 @@ export const MAX_GUARDIAN_ABOUT_LENGTH = 160;
 export const MAX_GUARDIAN_KIND_LENGTH = 64;
 /** Ids the wallet gives its own entries: the developer's custom endpoint and the no-Guardian choice. */
 export const RESERVED_GUARDIAN_IDS = ["custom", "no-guardian"];
+/** The protocol strings Epoch hashes into `protocolHashIdentifier` (`keccak256(toBytes(protocol))`). */
+export const EARN_PROTOCOLS = ["1delta", "dummy-lending"];
+/** The risk labels the Earn picker can show. */
+export const EARN_RISKS = ["low", "medium", "high"];
+/** The longest vault name and `about` text the wallet shows. */
+export const MAX_EARN_VAULT_NAME_LENGTH = 64;
+export const MAX_EARN_VAULT_ABOUT_LENGTH = 200;
+/** The page size of the `/pools` request that checks the listed markets. */
+export const EARN_POOLS_PAGE_SIZE = 400;
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
@@ -53,6 +62,10 @@ const GUARDIAN_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const GUARDIAN_COMMITMENT = /^0x[0-9a-fA-F]{64}$/;
 // C0 controls, DEL and C1 controls: none belongs in a line of text the wallet shows.
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
+// An Earn vault id: a lower-case letter, then lower-case letters, digits and hyphens.
+const EARN_VAULT_ID = /^[a-z][a-z0-9-]*$/;
+// An Epoch market: `LENDER_KEY:chainId:underlying`, with a lower-case 0x underlying address.
+const EARN_MARKET_UID = /^([A-Z0-9_]+):([1-9][0-9]*):(0x[0-9a-f]{40})$/;
 
 /** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
 export const EVM_RPCS = {
@@ -417,6 +430,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   }
   if (featuresIn.earn && !providers.epoch)
     errors.push("Earn requires the Epoch provider");
+  const earn = readEarn(body.earn, featuresIn.earn === true, chains, errors);
   const swapIn = readSection(body, "swap", errors);
   const swap = {
     tokens: readSwapTokens(swapIn.tokens, errors, dropped),
@@ -452,10 +466,126 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           mainnetCountdown: readCountdown(body.mainnetCountdown),
           onboarding,
           ...(guardians === undefined ? {} : { guardians }),
+          ...(earn === undefined ? {} : { earn }),
         },
     errors,
     dropped,
   };
+}
+
+/**
+ * The wallet's Earn vaults (schema.ts readEarn): the markets the Earn picker shows, in order, with
+ * the first vault that takes deposits as the default market. The section exists exactly while
+ * `features.earn` is on, so a stale list cannot linger behind a switched-off feature. A bad entry
+ * rejects the document. Each market lives on a chain with an Epoch route and lends that route's USDC.
+ */
+function readEarn(value, earnOn, chains, errors) {
+  if (value === undefined) {
+    if (earnOn)
+      errors.push("earn.vaults is required while features.earn is on");
+    return undefined;
+  }
+  if (!earnOn) errors.push("earn must be omitted while features.earn is off");
+  if (!isRecord(value)) {
+    errors.push("earn must be an object");
+    return undefined;
+  }
+  if (!Array.isArray(value.vaults)) {
+    errors.push("earn.vaults must be an array");
+    return undefined;
+  }
+  if (earnOn && value.vaults.length === 0)
+    errors.push("earn.vaults must name at least one vault while features.earn is on");
+  const vaults = [];
+  value.vaults.forEach((entry, index) => {
+    const label = `earn.vaults[${index}]`;
+    if (!isRecord(entry)) {
+      errors.push(`${label} must be an object`);
+      return;
+    }
+    const { id, marketUid, name, protocol, about, risk, depositsEnabled } =
+      entry;
+    if (typeof id !== "string" || !EARN_VAULT_ID.test(id))
+      errors.push(
+        `${label}.id must start with a lower-case letter and hold only lower-case letters, digits and hyphens`,
+      );
+    readEarnMarket(marketUid, label, chains, errors);
+    if (
+      typeof name !== "string" ||
+      name.length === 0 ||
+      name.length > MAX_EARN_VAULT_NAME_LENGTH
+    )
+      errors.push(
+        `${label}.name must be 1 to ${MAX_EARN_VAULT_NAME_LENGTH} characters`,
+      );
+    if (!EARN_PROTOCOLS.includes(protocol))
+      errors.push(`${label}.protocol must be one of ${EARN_PROTOCOLS.join(", ")}`);
+    if (
+      about !== undefined &&
+      (typeof about !== "string" || about.length > MAX_EARN_VAULT_ABOUT_LENGTH)
+    )
+      errors.push(
+        `${label}.about must be a string of at most ${MAX_EARN_VAULT_ABOUT_LENGTH} characters`,
+      );
+    if (risk !== undefined && !EARN_RISKS.includes(risk))
+      errors.push(`${label}.risk must be one of ${EARN_RISKS.join(", ")}`);
+    if (depositsEnabled !== undefined && typeof depositsEnabled !== "boolean")
+      errors.push(`${label}.depositsEnabled must be boolean`);
+    vaults.push({
+      id,
+      marketUid,
+      name,
+      protocol,
+      depositsEnabled: depositsEnabled !== false,
+      ...(about === undefined ? {} : { about }),
+      ...(risk === undefined ? {} : { risk }),
+    });
+  });
+  const ids = new Set();
+  const marketUids = new Set();
+  for (const vault of vaults) {
+    if (typeof vault.id === "string" && ids.has(vault.id))
+      errors.push(`earn.vaults names id ${vault.id} twice`);
+    ids.add(vault.id);
+    if (typeof vault.marketUid !== "string") continue;
+    const uid = vault.marketUid.toLowerCase();
+    if (marketUids.has(uid))
+      errors.push(`earn.vaults names market ${vault.marketUid} twice`);
+    marketUids.add(uid);
+  }
+  return { vaults };
+}
+
+/** A market lends the USDC of a chain's Epoch route, on that chain. */
+function readEarnMarket(marketUid, label, chains, errors) {
+  const match =
+    typeof marketUid === "string" ? EARN_MARKET_UID.exec(marketUid) : null;
+  if (match === null) {
+    errors.push(
+      `${label}.marketUid must be LENDER_KEY:chainId:underlying with an upper-case lender key and a lower-case 0x address`,
+    );
+    return;
+  }
+  const chainId = Number(match[2]);
+  const underlying = match[3];
+  const chain = Object.values(chains).find(
+    (candidate) =>
+      isRecord(candidate) &&
+      candidate.chainId === chainId &&
+      isRecord(candidate.bridges) &&
+      isRecord(candidate.bridges.epoch),
+  );
+  if (chain === undefined) {
+    errors.push(
+      `${label}.marketUid names chain ${match[2]}, which has no Epoch route in supportedEvmChains`,
+    );
+    return;
+  }
+  const usdc = chain.bridges.epoch.tokens?.USDC?.contractAddress;
+  if (typeof usdc !== "string" || usdc.toLowerCase() !== underlying)
+    errors.push(
+      `${label}.marketUid lends ${underlying}, not the Epoch USDC of chain ${match[2]}`,
+    );
 }
 
 function readGuardianLabel(
@@ -859,6 +989,23 @@ export function plannedChecks(config, { publishedGuardians = [] } = {}) {
       `${providers.epoch.positionsUrl}/health`,
       (body) => body?.ok === true,
     );
+    // One catalogue request per lent token: the listed markets must be ones Epoch serves.
+    const pools = new Map();
+    for (const vault of config.earn?.vaults ?? []) {
+      const [, chainId, underlying] = vault.marketUid.split(":");
+      const key = `${chainId}:${underlying}`;
+      pools.set(key, [...(pools.get(key) ?? []), vault.marketUid]);
+    }
+    for (const [key, marketUids] of pools) {
+      const [chainId, underlying] = key.split(":");
+      add({
+        key: `pools:${key}`,
+        kind: "earn-pools",
+        label: `Earn markets of ${underlying} on chain ${chainId}`,
+        url: `${providers.epoch.positionsUrl}/pools?chainId=${chainId}&count=${EARN_POOLS_PAGE_SIZE}&start=0&underlyings=${underlying}`,
+        marketUids,
+      });
+    }
   }
   return [...checks.values()];
 }
@@ -917,6 +1064,52 @@ async function guardianPubkey(check, fetchImpl) {
   };
 }
 
+/**
+ * Epoch's catalogue lists the markets it serves for one token on one chain. Every listed vault's
+ * market must be among them. A host without the `/pools` route (testnet's) cannot verify the
+ * markets, so its 404 is a warning, not a failure.
+ */
+async function earnPools(check, fetchImpl) {
+  const res = await fetchWithTimeout(fetchImpl, check.url, {
+    headers: { accept: "application/json" },
+  });
+  if (res.status === 404)
+    return {
+      ok: false,
+      advisory: true,
+      detail: `${check.url} answered HTTP 404, so the host has no /pools route and ${check.marketUids.join(", ")} cannot be verified`,
+    };
+  if (res.status !== 200)
+    return { ok: false, detail: `${check.url} answered HTTP ${res.status}` };
+  let body;
+  try {
+    body = await res.json();
+  } catch {
+    return { ok: false, detail: `${check.url} did not answer JSON` };
+  }
+  const items = isRecord(body) && isRecord(body.data) ? body.data.items : undefined;
+  if (!Array.isArray(items))
+    return {
+      ok: false,
+      detail: `${check.url} answered ${JSON.stringify(body).slice(0, 160)}, not data.items`,
+    };
+  const served = new Set(
+    items
+      .map((item) => (isRecord(item) ? item.marketUid : undefined))
+      .filter((uid) => typeof uid === "string")
+      .map((uid) => uid.toLowerCase()),
+  );
+  const missing = check.marketUids.filter(
+    (uid) => !served.has(uid.toLowerCase()),
+  );
+  return missing.length === 0
+    ? { ok: true, detail: `${check.url} serves ${check.marketUids.join(", ")}` }
+    : {
+        ok: false,
+        detail: `${check.url} does not serve ${missing.join(", ")} (${items.length} markets listed)`,
+      };
+}
+
 /** JSON-RPC against each of the chain's RPCs in turn; the first answer wins. */
 export async function evmRpc(chainId, method, params, fetchImpl) {
   const failures = [];
@@ -947,6 +1140,8 @@ async function runCheck(check, config, fetchImpl) {
       return httpHealth(check, fetchImpl);
     case "guardian":
       return guardianPubkey(check, fetchImpl);
+    case "earn-pools":
+      return earnPools(check, fetchImpl);
     case "evm-chain": {
       const answered = Number(
         await evmRpc(check.chainId, "eth_chainId", [], fetchImpl),
@@ -972,7 +1167,7 @@ async function runCheck(check, config, fetchImpl) {
           }
         : {
             ok: false,
-            detail: `${check.address} has no code on chain ${config.evm.chainId}`,
+            detail: `${check.address} has no code on chain ${check.chainId}`,
           };
     }
     case "evm-uint": {

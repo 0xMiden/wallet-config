@@ -384,6 +384,8 @@ test("preserves the published feature keys and validates their boolean values", 
   for (const name of Object.keys(source.features)) {
     const body = copy();
     body.features[name] = false;
+    // The Earn vaults exist only while Earn is on.
+    if (name === "earn") delete body.earn;
     const result = parseBridgeConfigDetailed(body, "testnet");
     assert.deepEqual(result.errors, []);
     assert.equal(result.config.features[name], false);
@@ -650,4 +652,371 @@ test("refuses a document whose new Guardian operator is down and passes one whos
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+const mainnet = JSON.parse(
+  readFileSync(new URL("../mainnet.json", import.meta.url)),
+);
+const mainnetCopy = () => structuredClone(mainnet);
+const mainnetErrors = (body) =>
+  parseBridgeConfigDetailed(body, "mainnet").errors;
+const BASE_USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+const ARBITRUM_USDC = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
+const ETHEREUM_USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+const POSITIONS = "https://miden-integration-example.epochprotocol.xyz/onedelta";
+/** The mainnet document with one vault changed by `change`. */
+const withVault = (change) => {
+  const body = mainnetCopy();
+  change(body.earn.vaults[0]);
+  return body;
+};
+const hasError = (body, fragment) =>
+  mainnetErrors(body).some((error) => error.includes(fragment));
+
+test("reads the Earn vaults in document order with deposits on by default", () => {
+  const config = parseBridgeConfig(mainnetCopy(), "mainnet");
+  assert.deepEqual(
+    config.earn.vaults.map((vault) => vault.id),
+    [
+      "aave-v3-arbitrum-usdc",
+      "compound-v3-arbitrum-usdc",
+      "aave-v3-base-usdc",
+      "compound-v3-base-usdc",
+      "aave-v3-ethereum-usdc",
+      "compound-v3-ethereum-usdc",
+    ],
+  );
+  assert.deepEqual(config.earn.vaults[0], {
+    id: "aave-v3-arbitrum-usdc",
+    marketUid: `AAVE_V3:42161:${ARBITRUM_USDC}`,
+    name: "Aave V3 USDC",
+    protocol: "1delta",
+    depositsEnabled: true,
+  });
+  assert.deepEqual(
+    parseBridgeConfig(copy(), "testnet").earn.vaults.map(
+      (vault) => vault.marketUid,
+    ),
+    [`DUMMY_LENDING:11155111:${source.supportedEvmChains.sepolia.bridges.epoch.tokens.USDC.contractAddress.toLowerCase()}`],
+  );
+});
+
+test("reads a vault's optional about, risk and depositsEnabled as written", () => {
+  const body = withVault((vault) => {
+    vault.about = "a".repeat(200);
+    vault.risk = "medium";
+    vault.depositsEnabled = false;
+  });
+  const [vault] = parseBridgeConfig(body, "mainnet").earn.vaults;
+  assert.equal(vault.about, "a".repeat(200));
+  assert.equal(vault.risk, "medium");
+  assert.equal(vault.depositsEnabled, false);
+});
+
+test("Earn on needs a non-empty vault list", () => {
+  const missing = mainnetCopy();
+  delete missing.earn;
+  assert.ok(hasError(missing, "earn.vaults is required while features.earn is on"));
+  const empty = mainnetCopy();
+  empty.earn.vaults = [];
+  assert.ok(hasError(empty, "earn.vaults must name at least one vault"));
+  const noList = mainnetCopy();
+  noList.earn = {};
+  assert.ok(hasError(noList, "earn.vaults must be an array"));
+  const notObject = mainnetCopy();
+  notObject.earn = [];
+  assert.ok(hasError(notObject, "earn must be an object"));
+});
+
+test("Earn off refuses an Earn section, and needs none", () => {
+  for (const earn of [false, undefined]) {
+    const stale = mainnetCopy();
+    if (earn === undefined) delete stale.features.earn;
+    else stale.features.earn = earn;
+    assert.ok(hasError(stale, "earn must be omitted while features.earn is off"));
+    const empty = mainnetCopy();
+    empty.features.earn = earn;
+    empty.earn.vaults = [];
+    assert.ok(hasError(empty, "earn must be omitted while features.earn is off"));
+    delete stale.earn;
+    assert.deepEqual(mainnetErrors(stale), []);
+  }
+});
+
+test("refuses a vault id that is not a lower-case slug, and a repeated id", () => {
+  for (const id of ["Aave", "1aave", "-aave", "aave_v3", "", 7, undefined])
+    assert.ok(
+      hasError(withVault((vault) => { vault.id = id; }), "earn.vaults[0].id"),
+      JSON.stringify(id),
+    );
+  assert.deepEqual(
+    mainnetErrors(withVault((vault) => { vault.id = "a"; })),
+    [],
+  );
+  const repeated = mainnetCopy();
+  repeated.earn.vaults[1].id = repeated.earn.vaults[0].id;
+  assert.ok(hasError(repeated, "earn.vaults names id aave-v3-arbitrum-usdc twice"));
+});
+
+test("refuses a market uid that is not LENDER_KEY:chainId:underlying", () => {
+  for (const marketUid of [
+    `aave_v3:42161:${ARBITRUM_USDC}`,
+    `AAVE-V3:42161:${ARBITRUM_USDC}`,
+    `:42161:${ARBITRUM_USDC}`,
+    `AAVE_V3:0:${ARBITRUM_USDC}`,
+    `AAVE_V3:042161:${ARBITRUM_USDC}`,
+    `AAVE_V3:-1:${ARBITRUM_USDC}`,
+    "AAVE_V3:42161:0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    "AAVE_V3:42161:0xaf88",
+    `AAVE_V3:${ARBITRUM_USDC}`,
+    `AAVE_V3:42161:${ARBITRUM_USDC}:extra`,
+    42161,
+    undefined,
+  ])
+    assert.ok(
+      hasError(
+        withVault((vault) => { vault.marketUid = marketUid; }),
+        "earn.vaults[0].marketUid must be LENDER_KEY:chainId:underlying",
+      ),
+      JSON.stringify(marketUid),
+    );
+});
+
+test("refuses a market on a chain without an Epoch route", () => {
+  // Arc is listed, but only with a USDCx route.
+  assert.ok(
+    hasError(
+      withVault((vault) => {
+        vault.marketUid = "AAVE_V3:5042:0x3600000000000000000000000000000000000000";
+      }),
+      "names chain 5042, which has no Epoch route",
+    ),
+  );
+  // Optimism is not listed at all.
+  assert.ok(
+    hasError(
+      withVault((vault) => {
+        vault.marketUid = `AAVE_V3:10:${ARBITRUM_USDC}`;
+      }),
+      "names chain 10, which has no Epoch route",
+    ),
+  );
+  const unrouted = mainnetCopy();
+  delete unrouted.supportedEvmChains.arbitrum.bridges.epoch;
+  assert.ok(hasError(unrouted, "names chain 42161, which has no Epoch route"));
+});
+
+test("refuses a market that lends anything but the chain's Epoch USDC", () => {
+  assert.ok(
+    hasError(
+      withVault((vault) => {
+        vault.marketUid = `AAVE_V3:42161:${BASE_USDC}`;
+      }),
+      `lends ${BASE_USDC}, not the Epoch USDC of chain 42161`,
+    ),
+  );
+  const moved = mainnetCopy();
+  moved.supportedEvmChains.ethereum.bridges.epoch.tokens.USDC.contractAddress =
+    "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+  assert.ok(hasError(moved, "not the Epoch USDC of chain 1"));
+});
+
+test("refuses a market listed twice", () => {
+  const repeated = mainnetCopy();
+  repeated.earn.vaults[1].marketUid = repeated.earn.vaults[0].marketUid;
+  assert.ok(
+    hasError(repeated, `earn.vaults names market AAVE_V3:42161:${ARBITRUM_USDC} twice`),
+  );
+});
+
+test("refuses a vault name that is empty, longer than 64 characters or not a string", () => {
+  assert.deepEqual(
+    mainnetErrors(withVault((vault) => { vault.name = "n".repeat(64); })),
+    [],
+  );
+  for (const name of ["", "n".repeat(65), { en: "Aave" }, 7, undefined])
+    assert.ok(
+      hasError(withVault((vault) => { vault.name = name; }), "earn.vaults[0].name"),
+      JSON.stringify(name),
+    );
+});
+
+test("refuses a protocol Epoch does not hash", () => {
+  for (const protocol of ["dummy-lending", "1delta"])
+    assert.deepEqual(
+      mainnetErrors(withVault((vault) => { vault.protocol = protocol; })),
+      [],
+    );
+  for (const protocol of ["1Delta", "aave", "", 1, undefined])
+    assert.ok(
+      hasError(
+        withVault((vault) => { vault.protocol = protocol; }),
+        "earn.vaults[0].protocol must be one of 1delta, dummy-lending",
+      ),
+      JSON.stringify(protocol),
+    );
+});
+
+test("refuses an about longer than 200 characters or not a string", () => {
+  for (const about of ["a".repeat(201), 7, { en: "About" }])
+    assert.ok(
+      hasError(withVault((vault) => { vault.about = about; }), "earn.vaults[0].about"),
+      JSON.stringify(about),
+    );
+});
+
+test("refuses a risk outside low, medium and high", () => {
+  for (const risk of ["low", "medium", "high"])
+    assert.deepEqual(
+      mainnetErrors(withVault((vault) => { vault.risk = risk; })),
+      [],
+    );
+  for (const risk of ["Low", "none", "", 1])
+    assert.ok(
+      hasError(
+        withVault((vault) => { vault.risk = risk; }),
+        "earn.vaults[0].risk must be one of low, medium, high",
+      ),
+      JSON.stringify(risk),
+    );
+});
+
+test("refuses a depositsEnabled that is not boolean", () => {
+  for (const depositsEnabled of ["true", 1, null])
+    assert.ok(
+      hasError(
+        withVault((vault) => { vault.depositsEnabled = depositsEnabled; }),
+        "earn.vaults[0].depositsEnabled must be boolean",
+      ),
+      JSON.stringify(depositsEnabled),
+    );
+});
+
+test("refuses a vault that is not an object", () => {
+  const body = mainnetCopy();
+  body.earn.vaults[0] = "aave-v3-arbitrum-usdc";
+  assert.ok(hasError(body, "earn.vaults[0] must be an object"));
+});
+
+test("plans one catalogue check per lent token, and none while Earn is off", () => {
+  const config = parseBridgeConfig(mainnetCopy(), "mainnet");
+  const pools = plannedChecks(config).filter(
+    (check) => check.kind === "earn-pools",
+  );
+  assert.deepEqual(
+    pools.map(({ url, marketUids }) => ({ url, marketUids })),
+    [
+      [42161, ARBITRUM_USDC],
+      [8453, BASE_USDC],
+      [1, ETHEREUM_USDC],
+    ].map(([chainId, underlying]) => ({
+      url: `${POSITIONS}/pools?chainId=${chainId}&count=400&start=0&underlyings=${underlying}`,
+      marketUids: [
+        `AAVE_V3:${chainId}:${underlying}`,
+        `COMPOUND_V3_USDC:${chainId}:${underlying}`,
+      ],
+    })),
+  );
+  const off = mainnetCopy();
+  off.features.earn = false;
+  delete off.earn;
+  assert.equal(
+    plannedChecks(parseBridgeConfig(off, "mainnet")).some(
+      (check) => check.kind === "earn-pools",
+    ),
+    false,
+  );
+});
+
+/** A catalogue that serves `served` for every request, or answers `status`. */
+function catalogueWorld({ served = [], status = 200, body } = {}) {
+  return async (url) => {
+    const { pathname } = new URL(String(url));
+    if (!pathname.endsWith("/pools")) throw new Error(`unexpected ${url}`);
+    if (status !== 200) return new Response("missing", { status });
+    return Response.json(
+      body ?? {
+        success: true,
+        data: {
+          start: 0,
+          count: served.length,
+          items: served.map((marketUid) => ({ marketUid })),
+        },
+      },
+    );
+  };
+}
+const poolsOnly = (config) => ({
+  ...config,
+  guardians: [],
+  supportedEvmChains: {},
+});
+const allMainnetUids = mainnet.earn.vaults.map((vault) => vault.marketUid);
+
+test("passes the catalogue check when Epoch serves every listed market, in any case", async () => {
+  const config = poolsOnly(parseBridgeConfig(mainnetCopy(), "mainnet"));
+  const results = (
+    await smokeTest(
+      config,
+      catalogueWorld({
+        served: [
+          ...allMainnetUids.map((uid) => uid.toUpperCase()),
+          "MORPHO_BLUE_00:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        ],
+      }),
+    )
+  ).filter((result) => result.label.startsWith("Earn markets"));
+  assert.equal(results.length, 3);
+  assert.ok(results.every((result) => result.ok));
+});
+
+test("fails the catalogue check when Epoch does not serve a listed market", async () => {
+  const config = poolsOnly(parseBridgeConfig(mainnetCopy(), "mainnet"));
+  const missing = `COMPOUND_V3_USDC:8453:${BASE_USDC}`;
+  const results = (
+    await smokeTest(
+      config,
+      catalogueWorld({
+        served: allMainnetUids.filter((uid) => uid !== missing),
+      }),
+    )
+  ).filter((result) => result.label.startsWith("Earn markets"));
+  const failed = results.filter((result) => !result.ok);
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0].advisory, false);
+  assert.match(failed[0].detail, new RegExp(`does not serve ${missing}`));
+});
+
+test("fails the catalogue check on a server error or an answer without data.items", async () => {
+  const config = poolsOnly(parseBridgeConfig(mainnetCopy(), "mainnet"));
+  for (const world of [
+    catalogueWorld({ status: 500 }),
+    catalogueWorld({ body: { success: true, data: {} } }),
+    catalogueWorld({ body: [] }),
+  ]) {
+    const results = (await smokeTest(config, world)).filter((result) =>
+      result.label.startsWith("Earn markets"),
+    );
+    assert.ok(results.every((result) => !result.ok && !result.advisory));
+  }
+});
+
+test("only warns when the catalogue host has no /pools route", async () => {
+  const config = poolsOnly(parseBridgeConfig(copy(), "testnet"));
+  const [result] = (
+    await smokeTest(config, catalogueWorld({ status: 404 }))
+  ).filter((entry) => entry.label.startsWith("Earn markets"));
+  assert.equal(result.ok, false);
+  assert.equal(result.advisory, true);
+  assert.match(result.detail, /cannot be verified/);
+});
+
+test("--no-smoke makes no catalogue request", async () => {
+  const result = await validateFile("mainnet.json", {
+    smoke: false,
+    fetchImpl: async () => {
+      throw new Error("no request expected");
+    },
+  });
+  assert.deepEqual(result.errors, []);
 });
