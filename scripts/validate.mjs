@@ -45,6 +45,8 @@ const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 // A token symbol as the protocol's TokenSymbol allows it: 1 to 6 upper-case ASCII letters.
 const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
+// An ERC-20 symbol as the wallet shows it in the deposit token picker: 1 to 11 upper-case ASCII letters or digits.
+const AGGLAYER_TOKEN_SYMBOL = /^[A-Z0-9]{1,11}$/;
 // A Guardian operator id: lower-case letters and digits in groups joined by single hyphens.
 const GUARDIAN_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // A Guardian's key commitment as `GET /pubkey` serves it: a 32-byte 0x word.
@@ -380,6 +382,33 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
         case "agglayer":
           required(bridge, "contractAddress", label, EVM_ADDRESS);
           required(bridge, "midenBridgeId", label, MIDEN_ACCOUNT_ID);
+          // A Blockscout API root that lists an address's ERC-20 holdings: on a test network the
+          // wallet offers the connected wallet's holdings through it, on top of `tokens`.
+          readUrl(bridge, label, "tokenApiUrl", options.allowLocalHttp === true, errors);
+          // The ERC-20 source tokens the wallet offers for a deposit, keyed by symbol. Native ETH is
+          // never listed: the wallet finds it in the Miden bridge's faucet registry, which also must
+          // list each token here before the wallet offers it.
+          if (bridge.tokens !== undefined) {
+            if (!isRecord(bridge.tokens)) {
+              errors.push(`${label}.tokens must be an object`);
+              break;
+            }
+            const addresses = new Set();
+            for (const [symbol, token] of Object.entries(bridge.tokens)) {
+              const tokenLabel = `${label}.tokens.${symbol}`;
+              if (!AGGLAYER_TOKEN_SYMBOL.test(symbol))
+                errors.push(`${tokenLabel} is not a token symbol`);
+              if (!isRecord(token)) {
+                errors.push(`${tokenLabel} must be an object`);
+                continue;
+              }
+              required(token, "contractAddress", tokenLabel, EVM_ADDRESS);
+              const address = String(token.contractAddress).toLowerCase();
+              if (addresses.has(address))
+                errors.push(`${label}.tokens names ${address} twice`);
+              addresses.add(address);
+            }
+          }
           break;
         default:
           errors.push(`${label} is not a supported bridge`);
@@ -762,6 +791,21 @@ export function plannedChecks(config, { publishedGuardians = [] } = {}) {
             data: "0xbab161bf",
             label: `${name} Agglayer networkID()`,
           });
+          for (const [symbol, token] of Object.entries(bridge.tokens ?? {})) {
+            code(
+              chain.chainId,
+              token.contractAddress,
+              `${name} Agglayer ${symbol}`,
+            );
+            add({
+              key: `decimals:${chain.chainId}:${token.contractAddress}`,
+              kind: "evm-uint",
+              chainId: chain.chainId,
+              address: token.contractAddress,
+              data: "0x313ce567",
+              label: `${name} Agglayer ${symbol} decimals()`,
+            });
+          }
           break;
         case "usdcx": {
           code(

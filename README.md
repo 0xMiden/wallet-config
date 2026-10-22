@@ -83,8 +83,22 @@ and `withdrawalEnabled` booleans. A missing bridge is unavailable.
 | Bridge     | Route fields                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------- |
 | `epoch`    | `tokens.USDC.contractAddress`; optional `tokens.USDC.outputs` lists provider output names |
-| `agglayer` | `contractAddress`, `midenBridgeId`                                                        |
+| `agglayer` | `contractAddress`, `midenBridgeId`; optional `tokens.<SYMBOL>.contractAddress`, `tokenApiUrl` |
 | `usdcx`    | `domain`, `tokens.USDC.contractAddress`, optional `deposit`, optional `executor`          |
+
+Agglayer `tokens` lists the ERC-20 source tokens the wallet offers for a deposit,
+keyed by the symbol the picker shows (upper-case letters and digits, at most 11).
+Native ETH is never listed: the wallet finds it in the Miden bridge's faucet
+registry. That registry is the trust source for every listed token: the wallet
+offers a token only when the registry holds a faucet for its contract address,
+and takes the token's decimals from the contract. A listed token the registry
+does not hold is dropped, so list a token once its faucet is registered.
+
+Agglayer `tokenApiUrl` is a Blockscout API root (`https://<host>/api/v2`) that
+lists an address's ERC-20 holdings on the chain. On a test network the wallet
+also offers every holding of the connected wallet above 1e-5 of a token, since
+the testnet bridge registers a token's faucet on its first deposit. Mainnet
+offers only `tokens` and native ETH, whatever the field says.
 
 A USDCx `deposit` is one of these forms:
 

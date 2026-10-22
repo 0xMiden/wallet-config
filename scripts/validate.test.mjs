@@ -83,6 +83,26 @@ test("bad route data rejects the document", async (t) => {
     (b) => {
       b.swap.tokens[0].decimals = 1.5;
     },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokens = [];
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokens.USDC.contractAddress =
+        "0x1";
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokens["usdc.e"] = {
+        contractAddress: "0x0000000000000000000000000000000000000001",
+      };
+    },
+    (b) => {
+      const tokens = b.supportedEvmChains.sepolia.bridges.agglayer.tokens;
+      tokens.USDT = { contractAddress: tokens.USDC.contractAddress };
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokenApiUrl =
+        "http://eth-sepolia.blockscout.com/api/v2";
+    },
   ];
   for (const [index, change] of cases.entries())
     await t.test(`rejects route mutation ${index + 1}`, () => {
@@ -90,6 +110,25 @@ test("bad route data rejects the document", async (t) => {
       change(body);
       assert.ok(errors(body).length > 0);
     });
+});
+test("Agglayer tokens are optional and each one is probed", () => {
+  const body = copy();
+  const agglayer = body.supportedEvmChains.sepolia.bridges.agglayer;
+  const listed = Object.values(agglayer.tokens).map((token) =>
+    token.contractAddress.toLowerCase(),
+  );
+  const planned = plannedChecks(body).filter(
+    (check) =>
+      check.address !== undefined &&
+      listed.includes(check.address.toLowerCase()),
+  );
+  for (const kind of ["evm-code", "evm-uint"])
+    assert.equal(
+      planned.filter((check) => check.kind === kind).length,
+      listed.length,
+    );
+  delete agglayer.tokens;
+  assert.deepEqual(errors(body), []);
 });
 test("mainnet Epoch does not need a testnet faucet or market", () => {
   const body = copy();
