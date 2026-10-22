@@ -5,8 +5,11 @@ The wallet reads one network document from
 A changed document must have a higher `version`. The `network` must match the file name.
 
 Testnet is fully configured. Devnet keeps its published disabled document.
-Mainnet lists its Guardian operator and routes USDCx from Arc, Ethereum, Base, and
-Arbitrum. Its Earn, Epoch, and Agglayer features are off, and it has no swap tokens.
+Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
+Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
+Its Earn and Epoch features are off. Mainnet Swap uses
+`https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
+the solver's `/v2/pairs` endpoint.
 
 ## Mini-app registration
 
@@ -30,6 +33,51 @@ and withdrawals. A false global switch disables new transfers even when a chain
 route is enabled. When a bridge switch is omitted, the per-chain switches apply.
 The wallet gets Earn markets from Epoch. This document does not configure markets.
 
+`geo` contains the `wallet`, `earn` and `swap` location rules. The schema permits
+omitting `geo` for older documents, but the eligibility service requires an explicit
+`geo.wallet` map before granting access. A global denial blocks the whole wallet,
+including withdrawals. An Earn or Swap rule blocks new operations in that feature;
+an Earn-only denial leaves withdrawals available.
+
+Each rule is `block` plus a place, with `"yes"` to block or `"no"` to leave it
+unblocked. Places are `NY state`, `New York`, `UK`, `United Kingdom`,
+`Great Britain`, an ISO country (`DE`, `GB`) or a subdivision (`US-NY`, `US-CA`).
+Unknown features, invalid phrases and repeated places are refused.
+
+All three published network documents block Cuba (`CU`), Iran (`IR`), North Korea
+(`KP`), Russia (`RU`), Belarus (`BY`), Crimea (`UA-43`), Sevastopol (`UA-40`),
+Donetsk (`UA-14`), Luhansk (`UA-09`), Kherson (`UA-65`) and Zaporizhzhia (`UA-23`).
+The whole four oblasts are blocked. The policy does not distinguish territorial
+control within an oblast. NY and UK remain separate Earn-only rules.
+
+```json
+"geo": {
+  "wallet": {
+    "block CU": "yes",
+    "block IR": "yes",
+    "block KP": "yes",
+    "block RU": "yes",
+    "block BY": "yes",
+    "block UA-43": "yes",
+    "block UA-40": "yes",
+    "block UA-14": "yes",
+    "block UA-09": "yes",
+    "block UA-65": "yes",
+    "block UA-23": "yes"
+  },
+  "earn": {
+    "block NY state": "yes",
+    "block UK": "yes"
+  },
+  "swap": {
+    "block US-CA": "no"
+  }
+}
+```
+
+Older wallet versions that ignore `geo` gain the application gate only after
+updating. The service returns permission decisions, not the caller's location.
+
 `bridge-providers` holds shared services:
 
 | Provider   | Fields                                             |
@@ -50,8 +98,22 @@ and `withdrawalEnabled` booleans. A missing bridge is unavailable.
 | Bridge     | Route fields                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------- |
 | `epoch`    | `tokens.USDC.contractAddress`; optional `tokens.USDC.outputs` lists provider output names |
-| `agglayer` | `contractAddress`, `midenBridgeId`                                                        |
+| `agglayer` | `contractAddress`, `midenBridgeId`; optional `tokens.<SYMBOL>.contractAddress`, `tokenApiUrl` |
 | `usdcx`    | `domain`, `tokens.USDC.contractAddress`, optional `deposit`, optional `executor`          |
+
+Agglayer `tokens` lists the ERC-20 source tokens the wallet offers for a deposit,
+keyed by the symbol the picker shows (upper-case letters and digits, at most 11).
+Native ETH is never listed: the wallet finds it in the Miden bridge's faucet
+registry. That registry is the trust source for every listed token: the wallet
+offers a token only when the registry holds a faucet for its contract address,
+and takes the token's decimals from the contract. A listed token the registry
+does not hold is dropped, so list a token once its faucet is registered.
+
+Agglayer `tokenApiUrl` is a Blockscout API root (`https://<host>/api/v2`) that
+lists an address's ERC-20 holdings on the chain. On a test network the wallet
+also offers every holding of the connected wallet above 1e-5 of a token, since
+the testnet bridge registers a token's faucet on its first deposit. Mainnet
+offers only `tokens` and native ETH, whatever the field says.
 
 A USDCx `deposit` is one of these forms:
 
@@ -77,15 +139,15 @@ Source tokens belong to each bridge. There is no global EVM chain or USDC addres
 Chain order sets picker order. Do not sort the chain keys. Do not repeat keys:
 JSON parsing would discard the first value. Validation checks the source text.
 
-Direction switches control new transfers only. They must not block a claim,
-reclaim, Earn withdrawal, or recovery of an existing transfer. Existing transfers
-keep the data saved when they started.
+Direction switches control new transfers only. They leave claims, reclaims, Earn
+withdrawals and recovery available while the global wallet policy allows access.
+Existing transfers keep the data saved when they started.
 
 ## Other settings
 
 `swap`, `onboarding`, `mainnetCountdown`, and other unrelated sections remain in
 place. Swap requires an HTTPS `etaUrl` and at least two tokens when a token list
-is set. Each token needs a unique uppercase `symbol` (1–6 letters), a unique
+is set. Each token needs a unique uppercase `symbol` (1-6 letters), a unique
 15-byte `faucetId`, and integer `decimals` from 0 to 12. Optional `logo` values
 are `MIDEN`, `ETH`, `USDC`, and `BTC`. Optional `priceSymbol` values are `ETH`,
 `BTC`, and `USDC`.

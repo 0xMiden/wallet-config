@@ -32,7 +32,7 @@ const withoutGuardians = () => {
 };
 const errors = (body) => parseBridgeConfigDetailed(body, "testnet").errors;
 test("published documents use the new schema", async () => {
-  for (const file of ["testnet.json", "devnet.json"])
+  for (const file of ["testnet.json", "devnet.json", "mainnet.json"])
     assert.deepEqual((await validateFile(file, { smoke: false })).errors, []);
 });
 test("bad route data rejects the document", async (t) => {
@@ -83,6 +83,26 @@ test("bad route data rejects the document", async (t) => {
     (b) => {
       b.swap.tokens[0].decimals = 1.5;
     },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokens = [];
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokens.USDC.contractAddress =
+        "0x1";
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokens["usdc.e"] = {
+        contractAddress: "0x0000000000000000000000000000000000000001",
+      };
+    },
+    (b) => {
+      const tokens = b.supportedEvmChains.sepolia.bridges.agglayer.tokens;
+      tokens.USDT = { contractAddress: tokens.USDC.contractAddress };
+    },
+    (b) => {
+      b.supportedEvmChains.sepolia.bridges.agglayer.tokenApiUrl =
+        "http://eth-sepolia.blockscout.com/api/v2";
+    },
   ];
   for (const [index, change] of cases.entries())
     await t.test(`rejects route mutation ${index + 1}`, () => {
@@ -91,11 +111,131 @@ test("bad route data rejects the document", async (t) => {
       assert.ok(errors(body).length > 0);
     });
 });
+test("Agglayer tokens are optional and each one is probed", () => {
+  const body = copy();
+  const agglayer = body.supportedEvmChains.sepolia.bridges.agglayer;
+  const listed = Object.values(agglayer.tokens).map((token) =>
+    token.contractAddress.toLowerCase(),
+  );
+  const planned = plannedChecks(body).filter(
+    (check) =>
+      check.address !== undefined &&
+      listed.includes(check.address.toLowerCase()),
+  );
+  for (const kind of ["evm-code", "evm-uint"])
+    assert.equal(
+      planned.filter((check) => check.kind === kind).length,
+      listed.length,
+    );
+  delete agglayer.tokens;
+  assert.deepEqual(errors(body), []);
+});
 test("mainnet Epoch does not need a testnet faucet or market", () => {
   const body = copy();
   delete body["bridge-providers"].epoch.outputs;
   delete body.supportedEvmChains.sepolia.bridges.epoch.tokens.USDC.outputs;
   assert.deepEqual(errors(body), []);
+});
+test("geo rules name a feature and a place", () => {
+  const body = copy();
+  body.geo = {
+    earn: { "block NY state": "yes", "block UK": "yes", "block US-CA": "no" },
+    swap: { "block DE": "no" },
+  };
+  assert.deepEqual(errors(body), []);
+  body.geo.earn["block New York"] = "yes";
+  assert.ok(errors(body).some((error) => error.includes("names US-NY twice")));
+  body.geo = { bridgeIn: { "block UK": "yes" } };
+  assert.ok(errors(body).some((error) => error.includes("geo.bridgeIn is not a feature")));
+  body.geo = { earn: { "block Narnia": "yes" } };
+  assert.ok(errors(body).some((error) => error.includes("is not a place")));
+  body.geo = { earn: { "block UK": true } };
+  assert.ok(errors(body).some((error) => error.includes('must be "yes" or "no"')));
+});
+test("geo remains optional", () => {
+  const body = copy();
+  delete body.geo;
+  assert.deepEqual(errors(body), []);
+});
+test("geo rejects inherited alias names", async (t) => {
+  for (const feature of ["earn", "swap"])
+    for (const place of ["constructor", "__proto__"])
+      await t.test(`${feature}: ${place}`, () => {
+        const body = copy();
+        body.geo = { [feature]: { [`block ${place}`]: "yes" } };
+        assert.ok(errors(body).some((error) => error.includes("is not a place")));
+      });
+});
+test("geo rejects repeated raw keys before JSON loses them", async (t) => {
+  const body = copy();
+  delete body.geo;
+  const prefix = JSON.stringify(body).slice(0, -1);
+  const cases = [
+    ['"geo":{},"geo":{"earn":{"block UK":"no"}}', "document repeats geo"],
+    ['"geo":{"earn":{"block UK":"yes"},"earn":{"block UK":"no"}}', "geo repeats earn"],
+    ['"geo":{"swap":{"block UK":"yes"},"swap":{"block UK":"no"}}', "geo repeats swap"],
+    ['"geo":{"earn":{"block UK":"yes","block UK":"no"}}', "geo.earn repeats block UK"],
+    ['"geo":{"swap":{"block UK":"yes","block UK":"no"}}', "geo.swap repeats block UK"],
+    ['"geo":{"wallet":{"block CU":"yes","block CU":"no"}}', "geo.wallet repeats block CU"],
+  ];
+  const root = mkdtempSync(path.join(tmpdir(), "config-geo-test-"));
+  try {
+    for (const [section, expected] of cases)
+      await t.test(expected, async () => {
+        writeFileSync(path.join(root, "testnet.json"), `${prefix},${section}}`);
+        const result = await validateFile("testnet.json", { root, smoke: false });
+        assert.ok(result.errors.includes(expected), JSON.stringify(result.errors));
+      });
+    writeFileSync(
+      path.join(root, "testnet.json"),
+      `${prefix},"geo":{"earn":{"block UK":"yes"},"swap":{"block UK":"no"}}}`,
+    );
+    assert.deepEqual((await validateFile("testnet.json", { root, smoke: false })).errors, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+test("published global wallet policy blocks every required jurisdiction", () => {
+  const expected = Object.fromEntries(
+    ["CU", "IR", "KP", "RU", "BY", "UA-43", "UA-40", "UA-14", "UA-09", "UA-65", "UA-23"]
+      .map((place) => [`block ${place}`, "yes"]),
+  );
+  for (const file of ["testnet.json", "devnet.json", "mainnet.json"]) {
+    const body = JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url)));
+    assert.deepEqual(body.geo?.wallet, expected, file);
+    assert.deepEqual(body.geo?.earn, { "block NY state": "yes", "block UK": "yes" }, file);
+  }
+});
+test("geo wallet rules use the same validated place grammar", () => {
+  const body = copy();
+  body.geo = { wallet: { "block CU": "yes", "block UA-43": "yes" } };
+  assert.deepEqual(errors(body), []);
+  body.geo.wallet["block __proto__"] = "yes";
+  assert.ok(errors(body).some((error) => error.includes("is not a place")));
+});
+test("raw duplicate results stay unique across repeated keys and objects", () => {
+  for (const target of [[], ["geo"], ["geo", "wallet"], ["geo", "earn"], ["geo", "swap"], ["supportedEvmChains"]]) {
+    const wrap = (value) => target.reduceRight((text, key) => `{${JSON.stringify(key)}:${text}}`, value);
+    const first = wrap('{"b":0,"a":0,"b":1,"b":2}');
+    const second = wrap('{"a":0,"a":1,"b":0,"b":1}');
+    assert.deepEqual(duplicateKeys(first, target), ["b"]);
+    assert.deepEqual(duplicateKeys(`{${first.slice(1, -1)},${second.slice(1, -1)}}`, target), ["b", "a"]);
+  }
+});
+test("raw duplicate scans remain bounded for large geo objects", async (t) => {
+  const keys = Array.from({ length: 100000 }, (_, index) =>
+    `block ${String.fromCharCode(65 + Math.floor(index / 46656))}A-${(index % 46656).toString(36).padStart(3, "0")}`,
+  );
+  const entries = keys.flatMap((key) => [`${JSON.stringify(key)}:"yes"`, `${JSON.stringify(key)}:"no"`]).join(",");
+  for (const target of [["geo", "earn"], ["geo", "swap"], ["supportedEvmChains"]])
+    await t.test(target.join("."), () => {
+      const text = target.reduceRight((value, key) => `{${JSON.stringify(key)}:${value}}`, `{${entries}}`);
+      const start = performance.now();
+      const duplicates = duplicateKeys(text, target);
+      const elapsed = performance.now() - start;
+      assert.deepEqual(duplicates, keys);
+      assert.ok(elapsed < 5000, `duplicate scan exceeded5000ms: ${Math.round(elapsed)}ms`);
+    });
 });
 test("executor target can have both new-start controls off", () => {
   const body = copy();
