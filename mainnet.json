@@ -1,6 +1,9 @@
 {
   "network": "mainnet",
-  "version": 6,
+  "version": 7,
+  "swap": {
+    "etaUrl": "https://api.forkchoice.xyz"
+  },
   "guardians": [
     {
       "id": "lambda-class",
