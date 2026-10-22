@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 13,
+  "version": 14,
   "evm": {
     "chainId": 11155111
   },
