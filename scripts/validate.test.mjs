@@ -392,6 +392,27 @@ test("preserves the published feature keys and validates their boolean values", 
   }
 });
 
+test("nearIntents defaults off and accepts only explicit booleans", () => {
+  const body = copy();
+  delete body.features.nearIntents;
+  assert.equal(
+    parseBridgeConfigDetailed(body, "testnet").config.features.nearIntents,
+    false,
+  );
+  for (const value of [false, true]) {
+    body.features.nearIntents = value;
+    const result = parseBridgeConfigDetailed(body, "testnet");
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.config.features.nearIntents, value);
+  }
+  body.features.nearIntents = "true";
+  assert.ok(
+    errors(body).some((error) =>
+      error.includes("features.nearIntents must be boolean"),
+    ),
+  );
+});
+
 const FIXTURES = new URL("./fixtures/", import.meta.url);
 const readFixture = (kind, name) =>
   JSON.parse(readFileSync(new URL(`${kind}/${name}`, FIXTURES)));

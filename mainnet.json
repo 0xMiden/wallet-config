@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 6,
+  "version": 7,
   "guardians": [
     {
       "id": "lambda-class",
@@ -25,7 +25,8 @@
     "earn": false,
     "fastBridge": false,
     "bridgeIn": true,
-    "bridgeOut": true
+    "bridgeOut": true,
+    "nearIntents": false
   },
   "geo": {
     "wallet": {
