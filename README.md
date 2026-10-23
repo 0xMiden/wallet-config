@@ -11,6 +11,19 @@ Its Earn and Epoch features are off, and NEAR intents remain off. Mainnet Swap
 uses `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 
+## Mini-app registration
+
+New Bread mini-app registration targets this repository through a reviewed PR
+process. See [Mini-app registration](docs/mini-app-registration.md) for the
+candidate metadata, game/finance acceptance evidence, review and activation steps.
+
+Explore catalogs live separately in `explore/<network>.json`, with icons under
+`explore/icons/`. See [Explore catalog](docs/explore-catalog.md) for fields,
+validation, publishing and migration. The matching reader is in
+[wallet PR #1512](https://github.com/0xMiden/wallet/pull/1512).
+Released readers still use `0xMiden/wallet-explore` until that wallet update ships.
+Do not put app fields into the root bridge/swap documents; those readers ignore them.
+
 ## Bridge configuration
 
 `features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`, and
