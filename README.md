@@ -7,7 +7,9 @@ A changed document must have a higher `version`. The `network` must match the fi
 Testnet is fully configured. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
-Its Earn, Epoch, and NEAR intent features are off, and it has no swap tokens.
+Its Earn and Epoch features are off, and NEAR intents remain off. Mainnet Swap
+uses `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
+the solver's `/v2/pairs` endpoint.
 
 ## Bridge configuration
 
