@@ -4,7 +4,7 @@
  * listed Guardian operator for its key.
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -48,6 +48,8 @@ export const MAX_EARN_VAULT_NAME_LENGTH = 64;
 export const MAX_EARN_VAULT_ABOUT_LENGTH = 200;
 /** The page size of the `/pools` request that checks the listed markets. */
 export const EARN_POOLS_PAGE_SIZE = 400;
+/** The largest vault logo file the repository serves. */
+export const MAX_EARN_VAULT_LOGO_BYTES = 64 * 1024;
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
@@ -66,6 +68,23 @@ const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
 const EARN_VAULT_ID = /^[a-z][a-z0-9-]*$/;
 // An Epoch market: `LENDER_KEY:chainId:underlying`, with a lower-case 0x underlying address.
 const EARN_MARKET_UID = /^([A-Z0-9_]+):([1-9][0-9]*):(0x[0-9a-f]{40})$/;
+// An Earn vault logo: a file under `icons/`, relative to the directory the document is fetched from.
+const EARN_VAULT_LOGO = /^icons\/[a-z0-9]+(-[a-z0-9]+)*\.(svg|png)$/;
+// The eight bytes every PNG file starts with.
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+// An SVG starts with its root element, after an optional XML declaration and whitespace.
+const SVG_START = /^\s*(<\?xml[^>]*\?>\s*)?<svg[\s>/]/;
+// Content that can run code or load a remote resource. An `href` may only point inside the file (`#id`).
+const SVG_FORBIDDEN = [
+  [/<script/i, "a <script> element"],
+  [/<foreignObject/i, "a <foreignObject> element"],
+  [/\son[a-z]+\s*=/i, "an event handler attribute (on…)"],
+  [/javascript:/i, "a javascript: URL"],
+  [
+    /[\s:]href\s*=\s*(?:"(?!#)|'(?!#)|[^\s"'])/i,
+    "an href or xlink:href that does not start with #",
+  ],
+];
 
 /** Public RPCs per supported EVM chain, tried in order: one failing provider must not fail a deploy. */
 export const EVM_RPCS = {
@@ -430,7 +449,13 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   }
   if (featuresIn.earn && !providers.epoch)
     errors.push("Earn requires the Epoch provider");
-  const earn = readEarn(body.earn, featuresIn.earn === true, chains, errors);
+  const earn = readEarn(
+    body.earn,
+    featuresIn.earn === true,
+    chains,
+    options.root ?? REPO_ROOT,
+    errors,
+  );
   const swapIn = readSection(body, "swap", errors);
   const swap = {
     tokens: readSwapTokens(swapIn.tokens, errors, dropped),
@@ -478,8 +503,9 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
  * the first vault that takes deposits as the default market. The section exists exactly while
  * `features.earn` is on, so a stale list cannot linger behind a switched-off feature. A bad entry
  * rejects the document. Each market lives on a chain with an Epoch route and lends that route's USDC.
+ * A vault's optional logo is a file in the repository at `root`, which the check reads.
  */
-function readEarn(value, earnOn, chains, errors) {
+function readEarn(value, earnOn, chains, root, errors) {
   if (value === undefined) {
     if (earnOn)
       errors.push("earn.vaults is required while features.earn is on");
@@ -503,8 +529,16 @@ function readEarn(value, earnOn, chains, errors) {
       errors.push(`${label} must be an object`);
       return;
     }
-    const { id, marketUid, name, protocol, about, risk, depositsEnabled } =
-      entry;
+    const {
+      id,
+      marketUid,
+      name,
+      protocol,
+      about,
+      risk,
+      depositsEnabled,
+      logo,
+    } = entry;
     if (typeof id !== "string" || !EARN_VAULT_ID.test(id))
       errors.push(
         `${label}.id must start with a lower-case letter and hold only lower-case letters, digits and hyphens`,
@@ -531,6 +565,7 @@ function readEarn(value, earnOn, chains, errors) {
       errors.push(`${label}.risk must be one of ${EARN_RISKS.join(", ")}`);
     if (depositsEnabled !== undefined && typeof depositsEnabled !== "boolean")
       errors.push(`${label}.depositsEnabled must be boolean`);
+    if (logo !== undefined) readEarnLogo(logo, label, root, errors);
     vaults.push({
       id,
       marketUid,
@@ -539,6 +574,7 @@ function readEarn(value, earnOn, chains, errors) {
       depositsEnabled: depositsEnabled !== false,
       ...(about === undefined ? {} : { about }),
       ...(risk === undefined ? {} : { risk }),
+      ...(logo === undefined ? {} : { logo }),
     });
   });
   const ids = new Set();
@@ -554,6 +590,70 @@ function readEarn(value, earnOn, chains, errors) {
     marketUids.add(uid);
   }
   return { vaults };
+}
+
+/**
+ * A vault logo is a file this repository serves under `icons/`; the wallet fetches it at
+ * `<base>/<logo>`. The file must exist, stay within the size cap and be a PNG, or an SVG that can
+ * neither run code nor load a remote resource. Several vaults may name one file.
+ */
+function readEarnLogo(logo, label, root, errors) {
+  const name = `${label}.logo`;
+  if (typeof logo !== "string" || !EARN_VAULT_LOGO.test(logo)) {
+    errors.push(
+      `${name} must be a path icons/<name>.svg or icons/<name>.png, with a name of lower-case letters and digits in groups joined by single hyphens`,
+    );
+    return;
+  }
+  const file = path.join(root, logo);
+  let stat;
+  try {
+    stat = lstatSync(file);
+  } catch {
+    stat = undefined;
+  }
+  if (stat === undefined || !stat.isFile()) {
+    errors.push(`${name} names ${logo}, which is not a file in the repository`);
+    return;
+  }
+  if (stat.size > MAX_EARN_VAULT_LOGO_BYTES) {
+    errors.push(
+      `${name} names ${logo}, which is ${stat.size} bytes, more than ${MAX_EARN_VAULT_LOGO_BYTES}`,
+    );
+    return;
+  }
+  for (const reason of earnLogoErrors(readFileSync(file), logo))
+    errors.push(`${name} names ${logo}, which ${reason}`);
+}
+
+/** The reasons a logo file's bytes are refused; `logo` gives the file type by its extension. */
+export function earnLogoErrors(bytes, logo) {
+  if (bytes.length > MAX_EARN_VAULT_LOGO_BYTES)
+    return [`is more than ${MAX_EARN_VAULT_LOGO_BYTES} bytes`];
+  switch (path.extname(logo)) {
+    case ".png":
+      return PNG_SIGNATURE.every((byte, index) => bytes[index] === byte)
+        ? []
+        : ["does not start with the PNG signature"];
+    case ".svg": {
+      let text;
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch {
+        return ["is not UTF-8 text"];
+      }
+      const reasons = [];
+      if (!SVG_START.test(text))
+        reasons.push(
+          "does not start with <svg after an optional XML declaration",
+        );
+      for (const [pattern, what] of SVG_FORBIDDEN)
+        if (pattern.test(text)) reasons.push(`contains ${what}`);
+      return reasons;
+    }
+    default:
+      return ["is neither an SVG nor a PNG file"];
+  }
 }
 
 /** A market lends the USDC of a chain's Epoch route, on that chain. */
@@ -1325,7 +1425,8 @@ export async function validateFile(
   } catch (error) {
     return { errors: [`not JSON: ${error.message}`], notes };
   }
-  const parsed = parseBridgeConfigDetailed(body, network);
+  // Vault logos are files beside the document, so they are read from the same root.
+  const parsed = parseBridgeConfigDetailed(body, network, { root });
   errors.push(...parsed.errors);
   notes.push(...parsed.dropped.map((reason) => `dropped: ${reason}`));
   if (parsed.config === null) return { errors, notes };

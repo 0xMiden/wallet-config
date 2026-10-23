@@ -4,13 +4,17 @@ import { execFileSync } from "node:child_process";
 import {
   readFileSync,
   readdirSync,
+  mkdirSync,
   mkdtempSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  MAX_EARN_VAULT_LOGO_BYTES,
+  earnLogoErrors,
   parseBridgeConfig,
   parseBridgeConfigDetailed,
   publishedGuardianEndpoints,
@@ -692,6 +696,7 @@ test("reads the Earn vaults in document order with deposits on by default", () =
     name: "Aave V3 USDC",
     protocol: "1delta",
     depositsEnabled: true,
+    logo: "icons/aave.svg",
   });
   assert.deepEqual(
     parseBridgeConfig(copy(), "testnet").earn.vaults.map(
@@ -1019,4 +1024,226 @@ test("--no-smoke makes no catalogue request", async () => {
     },
   });
   assert.deepEqual(result.errors, []);
+});
+
+const PLAIN_SVG = '<svg viewBox="0 0 1 1" xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>';
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+/** A repository root that holds `files` (path to contents) under a fresh temporary directory. */
+function withRepo(files, run) {
+  const root = mkdtempSync(path.join(tmpdir(), "config-logo-test-"));
+  try {
+    for (const [name, contents] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+      writeFileSync(path.join(root, name), contents);
+    }
+    return run(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+/**
+ * The errors of vault 0 in the mainnet document with its logo set to `logo`, read against `root`.
+ * The other vaults' logos are not in `root`, so their errors are left out.
+ */
+const logoErrors = (logo, root) =>
+  parseBridgeConfigDetailed(
+    withVault((vault) => {
+      vault.logo = logo;
+    }),
+    "mainnet",
+    { root },
+  ).errors.filter((error) => error.startsWith("earn.vaults[0]."));
+const svgErrors = (text) => earnLogoErrors(Buffer.from(text), "icons/mark.svg");
+
+test("reads the published vault logos, and several vaults share one file", () => {
+  const vaults = parseBridgeConfig(mainnetCopy(), "mainnet").earn.vaults;
+  assert.deepEqual(
+    vaults.map((vault) => vault.logo),
+    [
+      "icons/aave.svg",
+      "icons/compound.svg",
+      "icons/aave.svg",
+      "icons/compound.svg",
+      "icons/aave.svg",
+      "icons/compound.svg",
+    ],
+  );
+  for (const file of ["aave", "compound", "morpho"]) {
+    const logo = `icons/${file}.svg`;
+    assert.deepEqual(
+      earnLogoErrors(readFileSync(new URL(`../${logo}`, import.meta.url)), logo),
+      [],
+      logo,
+    );
+  }
+});
+
+test("reads no logo from a vault that names none", () => {
+  const body = mainnetCopy();
+  delete body.earn.vaults[0].logo;
+  const [vault] = parseBridgeConfig(body, "mainnet").earn.vaults;
+  assert.equal("logo" in vault, false);
+});
+
+test("refuses a logo that is not a path icons/<name>.svg or icons/<name>.png", () => {
+  withRepo({ "icons/aave.svg": PLAIN_SVG, "icons/sub/aave.svg": PLAIN_SVG }, (root) => {
+    assert.deepEqual(logoErrors("icons/aave.svg", root), []);
+    for (const logo of [
+      "aave.svg",
+      "/icons/aave.svg",
+      "./icons/aave.svg",
+      "icons/../icons/aave.svg",
+      "icons/sub/aave.svg",
+      "icons/Aave.svg",
+      "icons/aave.SVG",
+      "icons/aave.gif",
+      "icons/aave.svg.png",
+      "icons/a--b.svg",
+      "icons/-aave.svg",
+      "icons/aave_v3.svg",
+      "icons/.svg",
+      "https://example.com/icons/aave.svg",
+      "",
+      7,
+      null,
+    ])
+      assert.ok(
+        logoErrors(logo, root).some((error) =>
+          error.startsWith("earn.vaults[0].logo must be a path icons/<name>.svg"),
+        ),
+        JSON.stringify(logo),
+      );
+  });
+});
+
+test("refuses a logo that names no file in the repository, a directory or a link", () => {
+  withRepo({ "icons/aave.svg": PLAIN_SVG, "icons/dir.svg/x": "" }, (root) => {
+    symlinkSync(path.join(root, "icons/aave.svg"), path.join(root, "icons/link.svg"));
+    for (const logo of ["icons/missing.svg", "icons/dir.svg", "icons/link.svg"])
+      assert.deepEqual(
+        logoErrors(logo, root),
+        [`earn.vaults[0].logo names ${logo}, which is not a file in the repository`],
+        logo,
+      );
+  });
+});
+
+test("refuses a logo file larger than 64 KiB", () => {
+  const padded = (size) => `${PLAIN_SVG}${" ".repeat(size - PLAIN_SVG.length)}`;
+  withRepo(
+    {
+      "icons/cap.svg": padded(MAX_EARN_VAULT_LOGO_BYTES),
+      "icons/over.svg": padded(MAX_EARN_VAULT_LOGO_BYTES + 1),
+    },
+    (root) => {
+      assert.deepEqual(logoErrors("icons/cap.svg", root), []);
+      assert.deepEqual(logoErrors("icons/over.svg", root), [
+        `earn.vaults[0].logo names icons/over.svg, which is ${MAX_EARN_VAULT_LOGO_BYTES + 1} bytes, more than ${MAX_EARN_VAULT_LOGO_BYTES}`,
+      ]);
+    },
+  );
+  assert.ok(
+    earnLogoErrors(Buffer.alloc(MAX_EARN_VAULT_LOGO_BYTES + 1), "icons/a.png").length > 0,
+  );
+});
+
+test("refuses a PNG logo without the PNG signature", () => {
+  withRepo(
+    {
+      "icons/good.png": PNG_BYTES,
+      "icons/svg.png": PLAIN_SVG,
+      "icons/short.png": PNG_BYTES.subarray(0, 7),
+    },
+    (root) => {
+      assert.deepEqual(logoErrors("icons/good.png", root), []);
+      for (const logo of ["icons/svg.png", "icons/short.png"])
+        assert.deepEqual(
+          logoErrors(logo, root),
+          [`earn.vaults[0].logo names ${logo}, which does not start with the PNG signature`],
+          logo,
+        );
+    },
+  );
+});
+
+test("refuses an SVG logo that is not UTF-8 text starting with <svg", () => {
+  assert.deepEqual(svgErrors(PLAIN_SVG), []);
+  assert.deepEqual(svgErrors(`\n  ${PLAIN_SVG}`), []);
+  assert.deepEqual(svgErrors(`<?xml version="1.0" encoding="UTF-8"?>\n${PLAIN_SVG}`), []);
+  assert.deepEqual(earnLogoErrors(Buffer.from(`﻿${PLAIN_SVG}`), "icons/a.svg"), []);
+  for (const text of [
+    `<!-- a comment -->${PLAIN_SVG}`,
+    `<!DOCTYPE svg>${PLAIN_SVG}`,
+    `<svgx/>`,
+    `<html>${PLAIN_SVG}</html>`,
+    "",
+  ])
+    assert.ok(
+      svgErrors(text).includes("does not start with <svg after an optional XML declaration"),
+      JSON.stringify(text),
+    );
+  assert.deepEqual(earnLogoErrors(PNG_BYTES, "icons/a.svg"), ["is not UTF-8 text"]);
+  withRepo({ "icons/png.svg": PNG_BYTES }, (root) =>
+    assert.deepEqual(logoErrors("icons/png.svg", root), [
+      "earn.vaults[0].logo names icons/png.svg, which is not UTF-8 text",
+    ]),
+  );
+});
+
+test("refuses an SVG logo that could run code or load a remote resource", () => {
+  const inside = (markup) => PLAIN_SVG.replace("</svg>", `${markup}</svg>`);
+  for (const [markup, reason] of [
+    ["<script>alert(1)</script>", "contains a <script> element"],
+    ["<SCRIPT/>", "contains a <script> element"],
+    ["<foreignObject><div/></foreignObject>", "contains a <foreignObject> element"],
+    ["<foreignobject/>", "contains a <foreignObject> element"],
+    ['<rect onload="x()"/>', "contains an event handler attribute (on…)"],
+    ['<rect\nonclick = "x()"/>', "contains an event handler attribute (on…)"],
+    ['<rect ONMOUSEOVER="x()"/>', "contains an event handler attribute (on…)"],
+    ['<a href="javascript:x()"/>', "contains a javascript: URL"],
+    ['<image href="https://example.com/a.png"/>', "contains an href or xlink:href that does not start with #"],
+    ['<image xlink:href="data:image/png;base64,AA"/>', "contains an href or xlink:href that does not start with #"],
+    ["<use href='other.svg#a'/>", "contains an href or xlink:href that does not start with #"],
+    ["<use href=a/>", "contains an href or xlink:href that does not start with #"],
+    ['<use href = ""/>', "contains an href or xlink:href that does not start with #"],
+  ])
+    assert.ok(svgErrors(inside(markup)).includes(reason), markup);
+  for (const markup of [
+    '<use href="#a"/>',
+    "<use xlink:href='#a'/>",
+    '<use href = "#a"/>',
+    '<path fill="url(#g)" d="M0 0"/>',
+    '<rect fill-opacity="1"/>',
+  ])
+    assert.deepEqual(svgErrors(inside(markup)), [], markup);
+  withRepo({ "icons/bad.svg": inside("<script/>") }, (root) =>
+    assert.deepEqual(logoErrors("icons/bad.svg", root), [
+      "earn.vaults[0].logo names icons/bad.svg, which contains a <script> element",
+    ]),
+  );
+});
+
+test("--no-smoke reads each logo from the document's repository", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "config-logo-test-"));
+  try {
+    writeFileSync(path.join(root, "mainnet.json"), JSON.stringify(mainnetCopy()));
+    mkdirSync(path.join(root, "icons"));
+    writeFileSync(path.join(root, "icons/aave.svg"), PLAIN_SVG);
+    const result = await validateFile("mainnet.json", {
+      root,
+      smoke: false,
+      fetchImpl: async () => {
+        throw new Error("no request expected");
+      },
+    });
+    assert.deepEqual(
+      result.errors,
+      [1, 3, 5].map(
+        (index) =>
+          `earn.vaults[${index}].logo names icons/compound.svg, which is not a file in the repository`,
+      ),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

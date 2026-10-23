@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 9,
+  "version": 10,
   "swap": {
     "etaUrl": "https://api.forkchoice.xyz"
   },
@@ -36,37 +36,43 @@
         "id": "aave-v3-arbitrum-usdc",
         "marketUid": "AAVE_V3:42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831",
         "name": "Aave V3 USDC",
-        "protocol": "1delta"
+        "protocol": "1delta",
+        "logo": "icons/aave.svg"
       },
       {
         "id": "compound-v3-arbitrum-usdc",
         "marketUid": "COMPOUND_V3_USDC:42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831",
         "name": "Compound III USDC",
-        "protocol": "1delta"
+        "protocol": "1delta",
+        "logo": "icons/compound.svg"
       },
       {
         "id": "aave-v3-base-usdc",
         "marketUid": "AAVE_V3:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
         "name": "Aave V3 USDC",
-        "protocol": "1delta"
+        "protocol": "1delta",
+        "logo": "icons/aave.svg"
       },
       {
         "id": "compound-v3-base-usdc",
         "marketUid": "COMPOUND_V3_USDC:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
         "name": "Compound III USDC",
-        "protocol": "1delta"
+        "protocol": "1delta",
+        "logo": "icons/compound.svg"
       },
       {
         "id": "aave-v3-ethereum-usdc",
         "marketUid": "AAVE_V3:1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         "name": "Aave V3 USDC",
-        "protocol": "1delta"
+        "protocol": "1delta",
+        "logo": "icons/aave.svg"
       },
       {
         "id": "compound-v3-ethereum-usdc",
         "marketUid": "COMPOUND_V3_USDC:1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         "name": "Compound III USDC",
-        "protocol": "1delta"
+        "protocol": "1delta",
+        "logo": "icons/compound.svg"
       }
     ]
   },

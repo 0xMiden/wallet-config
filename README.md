@@ -8,7 +8,8 @@ Testnet is fully configured. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
 Mainnet Earn is on: it lists Aave V3 and Compound III USDC vaults on Arbitrum,
-Base and Ethereum, through Epoch routes on those three chains. Epoch fast
+Base and Ethereum, through Epoch routes on those three chains, each with its
+protocol's logo from `icons/`. Epoch fast
 bridge transfers (`fastBridge`) stay off. Mainnet Swap uses
 `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
@@ -207,7 +208,8 @@ so a stale list cannot stay in the document.
       "id": "aave-v3-base-usdc",
       "marketUid": "AAVE_V3:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
       "name": "Aave V3 USDC",
-      "protocol": "1delta"
+      "protocol": "1delta",
+      "logo": "icons/aave.svg"
     }
   ]
 }
@@ -222,9 +224,35 @@ so a stale list cannot stay in the document.
 | `about`           | Optional. A description the wallet shows (at most 200 characters).                                                                                                                                                                                              |
 | `risk`            | Optional. `low`, `medium` or `high`.                                                                                                                                                                                                                            |
 | `depositsEnabled` | Optional boolean, default `true`. `false` marks a vault that takes no new deposits.                                                                                                                                                                              |
+| `logo`            | Optional. The path of a logo file in this repository, relative to the document: `icons/<name>.svg` or `icons/<name>.png`, where `<name>` is lower-case letters and digits in groups joined by single hyphens. Several vaults can name one file. |
 
 `name` and `about` are literal English text. The wallet shows them as written,
 in every language, and never translates them.
+
+### Vault logos
+
+The wallet fetches a `logo` from the directory it fetched the document from:
+`https://raw.githubusercontent.com/0xMiden/wallet-config/main/icons/aave.svg`
+for the published documents. When a vault has no `logo`, or the file cannot be
+fetched, the wallet draws the mark it bundles for the protocol, else the
+protocol's initial. Where each file comes from is in
+[`icons/README.md`](icons/README.md).
+
+The validator reads each named file from the repository, also with
+`--no-smoke`, and refuses the document when a file breaks one of these rules:
+
+- The file exists at the path, and it is at most 64 KiB (65,536 bytes).
+- A PNG starts with the PNG signature.
+- An SVG is UTF-8 text that starts with `<svg`, after an optional XML
+  declaration and whitespace.
+- An SVG contains no `<script`, no `<foreignObject`, no event handler attribute
+  (` on…=`), no `javascript:`, and no `href` or `xlink:href` whose value does
+  not start with `#`.
+
+So a logo cannot run code or load a remote resource. Give an SVG a square
+`viewBox` and no fixed `width` or `height` on its root, so the wallet can size
+it. Remove metadata, comments, `<title>`, `<desc>` and editor namespaces before
+you add a file.
 
 List order is the picker order. The first vault with deposits enabled is the
 default market. Do not sort the list.
