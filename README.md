@@ -7,17 +7,21 @@ A changed document must have a higher `version`. The `network` must match the fi
 Testnet is fully configured. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
-Its Earn and Epoch features are off. Mainnet Swap uses
-`https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
+Its Earn and Epoch features are off, and NEAR intents remain off. Mainnet Swap
+uses `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 
 ## Bridge configuration
 
-`features` keeps the existing switches: `earn`, `fastBridge`, `bridgeIn`, and
-`bridgeOut`. `earn` controls new Earn deposits. `fastBridge` controls Epoch
-transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer deposits
-and withdrawals. A false global switch disables new transfers even when a chain
-route is enabled. When a bridge switch is omitted, the per-chain switches apply.
+`features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`, and
+`nearIntents`. Each value must be a boolean; an omitted `nearIntents` defaults to
+`false`. `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
+until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
+configuration have been verified. Do not enable it with placeholder production
+URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
+Epoch transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer
+deposits and withdrawals. A false global switch disables new transfers even when
+a chain route is enabled. When a bridge switch is omitted, the per-chain switches apply.
 The wallet gets Earn markets from Epoch. This document does not configure markets.
 
 `geo` contains the `wallet`, `earn` and `swap` location rules. The schema permits

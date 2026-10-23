@@ -229,7 +229,13 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   if (!Number.isSafeInteger(body.version) || body.version < 1)
     errors.push("version must be a positive safe integer");
   const featuresIn = readSection(body, "features", errors);
-  const featureNames = ["earn", "fastBridge", "bridgeIn", "bridgeOut"];
+  const featureNames = [
+    "earn",
+    "fastBridge",
+    "bridgeIn",
+    "bridgeOut",
+    "nearIntents",
+  ];
   for (const name of featureNames) {
     if (featuresIn[name] !== undefined && typeof featuresIn[name] !== "boolean")
       errors.push(`features.${name} must be boolean`);
@@ -445,7 +451,11 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
       ? null
       : {
           ...body,
-          features: { ...featuresIn, earn: featuresIn.earn === true },
+          features: {
+            ...featuresIn,
+            earn: featuresIn.earn === true,
+            nearIntents: featuresIn.nearIntents === true,
+          },
           "bridge-providers": providers,
           supportedEvmChains: chains,
           swap,
