@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 8,
+  "version": 9,
   "swap": {
     "etaUrl": "https://api.forkchoice.xyz"
   },
@@ -22,6 +22,24 @@
       "endpoint": "https://guardian.kodax.com",
       "about": "Korea Digital Asset, a digital asset custody company based in South Korea.",
       "kind": "Digital asset custodian"
+    },
+    {
+      "id": "gateway",
+      "name": "Gateway Operator",
+      "operatedBy": "Gateway",
+      "location": "EU-NORTH",
+      "endpoint": "https://guardian-cedar-miden.eu-north-3.gateway.fm",
+      "about": "Gateway, a blockchain infrastructure provider that runs nodes and networks.",
+      "kind": "Blockchain infrastructure provider"
+    },
+    {
+      "id": "para",
+      "name": "Para",
+      "operatedBy": "Para",
+      "location": "US-EAST",
+      "endpoint": "https://miden-guardian.getpara.com",
+      "about": "Para, an embedded wallet infrastructure provider.",
+      "kind": "Embedded wallet infrastructure"
     }
   ],
   "features": {
