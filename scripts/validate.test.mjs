@@ -739,8 +739,12 @@ test("exits 1 when a mainnet live check fails", async (t) => {
   const mainnet = lines.indexOf("\nmainnet.json");
   const testnet = lines.indexOf("\ntestnet.json");
   assert.ok(mainnet >= 0 && testnet > mainnet, lines.join("\n"));
-  assert.equal(lines[mainnet + 1], `  ✗ ${KODA_DOWN}`);
-  assert.equal(lines[testnet + 1], `  ⚠ warning: ${KODA_DOWN}`);
+  const mainnetLines = lines.slice(mainnet, testnet);
+  const testnetLines = lines.slice(testnet);
+  assert.ok(mainnetLines.includes(`  ✗ ${KODA_DOWN}`), lines.join("\n"));
+  assert.ok(!mainnetLines.some((line) => line.startsWith("::warning")));
+  assert.ok(testnetLines.includes(`  ⚠ warning: ${KODA_DOWN}`));
+  assert.ok(!testnetLines.some((line) => line.startsWith("  ✗")));
 });
 
 test("exits 1 on a testnet schema error and makes no live check", async (t) => {
