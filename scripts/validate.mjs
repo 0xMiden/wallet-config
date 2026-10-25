@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Validate network documents, version changes, and enabled routes with Node 22, and ask every
- * listed Guardian operator for its key.
+ * listed Guardian operator for its key. A testnet live check that fails is a warning: testnet
+ * services go down often, and an outage must not block an unrelated publication.
  */
 import { execFileSync } from "node:child_process";
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
@@ -50,6 +51,8 @@ export const MAX_EARN_VAULT_ABOUT_LENGTH = 200;
 export const EARN_POOLS_PAGE_SIZE = 400;
 /** The largest vault logo file the repository serves. */
 export const MAX_EARN_VAULT_LOGO_BYTES = 64 * 1024;
+/** The networks whose failed live checks are warnings; on the others they fail the document. */
+export const WARN_ONLY_LIVE_CHECK_NETWORKS = ["testnet"];
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
@@ -261,7 +264,13 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   if (!Number.isSafeInteger(body.version) || body.version < 1)
     errors.push("version must be a positive safe integer");
   const featuresIn = readSection(body, "features", errors);
-  const featureNames = ["earn", "fastBridge", "bridgeIn", "bridgeOut"];
+  const featureNames = [
+    "earn",
+    "fastBridge",
+    "bridgeIn",
+    "bridgeOut",
+    "nearIntents",
+  ];
   for (const name of featureNames) {
     if (featuresIn[name] !== undefined && typeof featuresIn[name] !== "boolean")
       errors.push(`features.${name} must be boolean`);
@@ -479,17 +488,30 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
   )
     errors.push("onboarding.inviteOnly must be boolean");
   geoErrors(body, errors);
+  const limits = readSection(body, "limits", errors);
+  if (
+    limits.bridgeInMaxBalanceUsd !== undefined &&
+    (typeof limits.bridgeInMaxBalanceUsd !== "number" ||
+      !Number.isFinite(limits.bridgeInMaxBalanceUsd) ||
+      limits.bridgeInMaxBalanceUsd <= 0)
+  )
+    errors.push("limits.bridgeInMaxBalanceUsd must be a number above zero");
   return {
     config: errors.length
       ? null
       : {
           ...body,
-          features: { ...featuresIn, earn: featuresIn.earn === true },
+          features: {
+            ...featuresIn,
+            earn: featuresIn.earn === true,
+            nearIntents: featuresIn.nearIntents === true,
+          },
           "bridge-providers": providers,
           supportedEvmChains: chains,
           swap,
           mainnetCountdown: readCountdown(body.mainnetCountdown),
           onboarding,
+          limits,
           ...(guardians === undefined ? {} : { guardians }),
           ...(earn === undefined ? {} : { earn }),
         },
@@ -1410,26 +1432,30 @@ function baseText(baseRef, file, root) {
   }
 }
 
-/** `file` is relative to `root`, the way `git show <ref>:<file>` names it. */
+/**
+ * `file` is relative to `root`, the way `git show <ref>:<file>` names it. `errors` fail the
+ * document; `warnings` are failed live checks that do not.
+ */
 export async function validateFile(
   file,
   { baseRef, smoke, root = REPO_ROOT, fetchImpl = fetch },
 ) {
   const errors = [];
   const notes = [];
+  const warnings = [];
   const network = path.basename(file, ".json");
   const text = readFileSync(path.join(root, file), "utf8");
   let body;
   try {
     body = JSON.parse(text);
   } catch (error) {
-    return { errors: [`not JSON: ${error.message}`], notes };
+    return { errors: [`not JSON: ${error.message}`], notes, warnings };
   }
   // Vault logos are files beside the document, so they are read from the same root.
   const parsed = parseBridgeConfigDetailed(body, network, { root });
   errors.push(...parsed.errors);
   notes.push(...parsed.dropped.map((reason) => `dropped: ${reason}`));
-  if (parsed.config === null) return { errors, notes };
+  if (parsed.config === null) return { errors, notes, warnings };
   errors.push(
     ...switchErrors(parsed.config),
     ...swapErrors(parsed.config),
@@ -1452,39 +1478,57 @@ export async function validateFile(
   if (bump !== null) errors.push(bump);
   if (smoke && errors.length === 0) {
     const publishedGuardians = publishedGuardianEndpoints(base, network);
+    const warnOnly = WARN_ONLY_LIVE_CHECK_NETWORKS.includes(network);
     for (const result of await smokeTest(parsed.config, fetchImpl, {
       publishedGuardians,
     })) {
       if (result.ok) notes.push(`ok: ${result.label}: ${result.detail}`);
-      else if (result.advisory)
-        notes.push(`warning: ${result.label}: ${result.detail}`);
+      else if (warnOnly || result.advisory)
+        warnings.push(`${result.label}: ${result.detail}`);
       else errors.push(`${result.label}: ${result.detail}`);
     }
   }
-  return { errors, notes };
+  return { errors, notes, warnings };
 }
 
-async function main(argv) {
+/** A GitHub Actions annotation, so a warning shows on the pull request as well as in the log. */
+export function warningAnnotation(file, message) {
+  const escape = (text) =>
+    text.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  const property = escape(file).replace(/:/g, "%3A").replace(/,/g, "%2C");
+  return `::warning file=${property}::${escape(message)}`;
+}
+
+export async function main(
+  argv,
+  { root = REPO_ROOT, baseRef = process.env.BASE_REF, fetchImpl = fetch } = {},
+) {
   const smoke = !argv.includes("--no-smoke");
   const named = argv
     .filter((arg) => !arg.startsWith("--"))
-    .map((file) => path.relative(REPO_ROOT, path.resolve(file)));
+    .map((file) => path.relative(root, path.resolve(file)));
   const files =
     named.length > 0
       ? named
-      : readdirSync(REPO_ROOT).filter((name) => name.endsWith(".json"));
+      : readdirSync(root).filter((name) => name.endsWith(".json"));
   if (files.length === 0) {
     console.error("no <network>.json documents found");
     return 1;
   }
   let failed = 0;
   for (const file of files) {
-    const { errors, notes } = await validateFile(file, {
-      baseRef: process.env.BASE_REF,
+    const { errors, notes, warnings } = await validateFile(file, {
+      baseRef,
       smoke,
+      root,
+      fetchImpl,
     });
     console.log(`\n${file}`);
     for (const note of notes) console.log(`  · ${note}`);
+    for (const warning of warnings) {
+      console.log(`  ⚠ warning: ${warning}`);
+      console.log(warningAnnotation(file, warning));
+    }
     for (const error of errors) console.log(`  ✗ ${error}`);
     if (errors.length > 0) failed++;
     else console.log("  ✓ valid");

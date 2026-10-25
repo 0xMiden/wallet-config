@@ -9,18 +9,22 @@ Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
 Mainnet Earn is on: it lists Aave V3 and Compound III USDC vaults on Arbitrum,
 Base and Ethereum, through Epoch routes on those three chains, each with its
-protocol's logo from `icons/`. Epoch fast
-bridge transfers (`fastBridge`) stay off. Mainnet Swap uses
+protocol's logo from `icons/`. Epoch fast bridge transfers (`fastBridge`) and
+NEAR intents stay off. Mainnet Swap uses
 `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 
 ## Bridge configuration
 
-`features` keeps the existing switches: `earn`, `fastBridge`, `bridgeIn`, and
-`bridgeOut`. `earn` controls new Earn deposits. `fastBridge` controls Epoch
-transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer deposits
-and withdrawals. A false global switch disables new transfers even when a chain
-route is enabled. When a bridge switch is omitted, the per-chain switches apply.
+`features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`, and
+`nearIntents`. Each value must be a boolean; an omitted `nearIntents` defaults to
+`false`. `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
+until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
+configuration have been verified. Do not enable it with placeholder production
+URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
+Epoch transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer
+deposits and withdrawals. A false global switch disables new transfers even when
+a chain route is enabled. When a bridge switch is omitted, the per-chain switches apply.
 The `earn` section lists the Earn markets (see [Earn vaults](#earn-vaults)).
 
 `geo` contains the `wallet`, `earn` and `swap` location rules. The schema permits
@@ -145,6 +149,12 @@ are `MIDEN`, `ETH`, `USDC`, and `BTC`. Optional `priceSymbol` values are `ETH`,
 `onboarding.inviteOnly` is an optional boolean. `mainnetCountdown.enabled` is a
 boolean; when true, `launchAt` must be a valid UTC timestamp such as
 `2026-10-26T16:00:00Z`.
+
+`limits.bridgeInMaxBalanceUsd` is an optional number above zero: the most an
+account may hold, in US dollars, once a bridge-in lands. The wallet's deposit
+screen refuses a deposit that takes the receiving account's valued holdings past
+it. It is a gate on that screen only: a note that arrives any other way is not
+refused. A document with no `limits` section sets no ceiling.
 
 ## Guardian operators
 
@@ -291,6 +301,12 @@ operator that `main` does not list yet must answer. An operator already on
 `main` that does not answer gives a warning only. Two operators that serve one
 key fail. The command cannot tell who operates an endpoint: confirm that with
 the operator before publication.
+
+On `testnet.json` every failed live check (service health, Guardian keys, RPC
+chain ids and contract reads) is a warning: the command prints it with a `⚠`
+and a GitHub `::warning` annotation that shows on the pull request, and the
+check still passes. On `mainnet.json` and `devnet.json` they fail as described
+above. Schema and URL format errors fail on every network.
 
 Stage a route with both direction switches false. Enable it after its contracts
 and services are ready. Keep route data while transfers can need recovery.
