@@ -83,6 +83,12 @@ test("bad route data rejects the document", async (t) => {
       b.onboarding.inviteOnly = "yes";
     },
     (b) => {
+      b.limits = { bridgeInMaxBalanceUsd: "1232.462" };
+    },
+    (b) => {
+      b.limits = { bridgeInMaxBalanceUsd: 0 };
+    },
+    (b) => {
       b.swap.tokens[0].decimals = 1.5;
     },
     (b) => {

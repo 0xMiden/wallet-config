@@ -1,6 +1,9 @@
 {
   "network": "mainnet",
-  "version": 9,
+  "version": 10,
+  "limits": {
+    "bridgeInMaxBalanceUsd": 1232.462
+  },
   "swap": {
     "etaUrl": "https://api.forkchoice.xyz"
   },
