@@ -1,8 +1,11 @@
 {
   "network": "mainnet",
-  "version": 6,
+  "version": 10,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
+  },
+  "swap": {
+    "etaUrl": "https://api.forkchoice.xyz"
   },
   "guardians": [
     {
@@ -22,13 +25,32 @@
       "endpoint": "https://guardian.kodax.com",
       "about": "Korea Digital Asset, a digital asset custody company based in South Korea.",
       "kind": "Digital asset custodian"
+    },
+    {
+      "id": "gateway",
+      "name": "Gateway Operator",
+      "operatedBy": "Gateway",
+      "location": "EU-NORTH",
+      "endpoint": "https://guardian-cedar-miden.eu-north-3.gateway.fm",
+      "about": "Gateway, a blockchain infrastructure provider that runs nodes and networks.",
+      "kind": "Blockchain infrastructure provider"
+    },
+    {
+      "id": "para",
+      "name": "Para",
+      "operatedBy": "Para",
+      "location": "US-EAST",
+      "endpoint": "https://miden-guardian.getpara.com",
+      "about": "Para, an embedded wallet infrastructure provider.",
+      "kind": "Embedded wallet infrastructure"
     }
   ],
   "features": {
     "earn": false,
     "fastBridge": false,
     "bridgeIn": true,
-    "bridgeOut": true
+    "bridgeOut": true,
+    "nearIntents": false
   },
   "geo": {
     "wallet": {
@@ -90,7 +112,30 @@
           "depositEnabled": true,
           "withdrawalEnabled": true,
           "contractAddress": "0x2a3dd3eb832af982ec71669e178424b10dca2ede",
-          "midenBridgeId": "0x69980662db6f43915a1f4750adabd3"
+          "midenBridgeId": "0x69980662db6f43915a1f4750adabd3",
+          "tokens": {
+            "WBTC": {
+              "contractAddress": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+            },
+            "WSOL": {
+              "contractAddress": "0xD31a59c85aE9D8edEFeC411D448f90841571b89c"
+            },
+            "NEAR": {
+              "contractAddress": "0x85F17Cf997934a597031b2E18a9aB6ebD4B9f6a4"
+            },
+            "PAXG": {
+              "contractAddress": "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
+            },
+            "USDT": {
+              "contractAddress": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+            },
+            "WBNB": {
+              "contractAddress": "0x418D75f65a02b3D53B2418FB8E1fe493759c7605"
+            },
+            "PYUSD": {
+              "contractAddress": "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
+            }
+          }
         },
         "usdcx": {
           "domain": 0,

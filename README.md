@@ -7,15 +7,21 @@ A changed document must have a higher `version`. The `network` must match the fi
 Testnet is fully configured. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
-Its Earn and Epoch features are off, and it has no swap tokens.
+Its Earn and Epoch features are off, and NEAR intents remain off. Mainnet Swap
+uses `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
+the solver's `/v2/pairs` endpoint.
 
 ## Bridge configuration
 
-`features` keeps the existing switches: `earn`, `fastBridge`, `bridgeIn`, and
-`bridgeOut`. `earn` controls new Earn deposits. `fastBridge` controls Epoch
-transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer deposits
-and withdrawals. A false global switch disables new transfers even when a chain
-route is enabled. When a bridge switch is omitted, the per-chain switches apply.
+`features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`, and
+`nearIntents`. Each value must be a boolean; an omitted `nearIntents` defaults to
+`false`. `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
+until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
+configuration have been verified. Do not enable it with placeholder production
+URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
+Epoch transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer
+deposits and withdrawals. A false global switch disables new transfers even when
+a chain route is enabled. When a bridge switch is omitted, the per-chain switches apply.
 The wallet gets Earn markets from Epoch. This document does not configure markets.
 
 `geo` contains the `wallet`, `earn` and `swap` location rules. The schema permits
@@ -83,8 +89,22 @@ and `withdrawalEnabled` booleans. A missing bridge is unavailable.
 | Bridge     | Route fields                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------- |
 | `epoch`    | `tokens.USDC.contractAddress`; optional `tokens.USDC.outputs` lists provider output names |
-| `agglayer` | `contractAddress`, `midenBridgeId`                                                        |
+| `agglayer` | `contractAddress`, `midenBridgeId`; optional `tokens.<SYMBOL>.contractAddress`, `tokenApiUrl` |
 | `usdcx`    | `domain`, `tokens.USDC.contractAddress`, optional `deposit`, optional `executor`          |
+
+Agglayer `tokens` lists the ERC-20 source tokens the wallet offers for a deposit,
+keyed by the symbol the picker shows (upper-case letters and digits, at most 11).
+Native ETH is never listed: the wallet finds it in the Miden bridge's faucet
+registry. That registry is the trust source for every listed token: the wallet
+offers a token only when the registry holds a faucet for its contract address,
+and takes the token's decimals from the contract. A listed token the registry
+does not hold is dropped, so list a token once its faucet is registered.
+
+Agglayer `tokenApiUrl` is a Blockscout API root (`https://<host>/api/v2`) that
+lists an address's ERC-20 holdings on the chain. On a test network the wallet
+also offers every holding of the connected wallet above 1e-5 of a token, since
+the testnet bridge registers a token's faucet on its first deposit. Mainnet
+offers only `tokens` and native ETH, whatever the field says.
 
 A USDCx `deposit` is one of these forms:
 
@@ -202,6 +222,12 @@ operator that `main` does not list yet must answer. An operator already on
 `main` that does not answer gives a warning only. Two operators that serve one
 key fail. The command cannot tell who operates an endpoint: confirm that with
 the operator before publication.
+
+On `testnet.json` every failed live check (service health, Guardian keys, RPC
+chain ids and contract reads) is a warning: the command prints it with a `⚠`
+and a GitHub `::warning` annotation that shows on the pull request, and the
+check still passes. On `mainnet.json` and `devnet.json` they fail as described
+above. Schema and URL format errors fail on every network.
 
 Stage a route with both direction switches false. Enable it after its contracts
 and services are ready. Keep route data while transfers can need recovery.

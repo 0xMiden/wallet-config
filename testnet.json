@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 13,
+  "version": 15,
   "evm": {
     "chainId": 11155111
   },
@@ -66,6 +66,16 @@
     "fastBridge": true,
     "bridgeIn": true,
     "bridgeOut": true
+  },
+  "earn": {
+    "vaults": [
+      {
+        "id": "dummy-lending-sepolia-usdc",
+        "marketUid": "DUMMY_LENDING:11155111:0x2bb4ffd7e2c6d432b697554efd77fa13bdbefd69",
+        "name": "Dummy Lending USDC",
+        "protocol": "dummy-lending"
+      }
+    ]
   },
   "geo": {
     "wallet": {
@@ -162,7 +172,13 @@
           "depositEnabled": true,
           "withdrawalEnabled": true,
           "contractAddress": "0x528e26b25a34a4a5d0dbda1d57d318153d2ed582",
-          "midenBridgeId": "0x187cabbc404359d16be94954ca9879"
+          "midenBridgeId": "0x187cabbc404359d16be94954ca9879",
+          "tokenApiUrl": "https://eth-sepolia.blockscout.com/api/v2",
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69"
+            }
+          }
         }
       }
     },
