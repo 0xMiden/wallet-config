@@ -7,7 +7,10 @@ A changed document must have a higher `version`. The `network` must match the fi
 Testnet is fully configured. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
-Its Earn and Epoch features are off. Mainnet Swap uses
+Mainnet Earn is on: it lists Aave V3 and Compound III USDC vaults on Arbitrum,
+Base and Ethereum, through Epoch routes on those three chains, each with its
+protocol's logo from `icons/`. Epoch fast bridge transfers (`fastBridge`) and
+NEAR intents stay off. Mainnet Swap uses
 `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 
@@ -26,12 +29,16 @@ Do not put app fields into the root bridge/swap documents; those readers ignore 
 
 ## Bridge configuration
 
-`features` keeps the existing switches: `earn`, `fastBridge`, `bridgeIn`, and
-`bridgeOut`. `earn` controls new Earn deposits. `fastBridge` controls Epoch
-transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer deposits
-and withdrawals. A false global switch disables new transfers even when a chain
-route is enabled. When a bridge switch is omitted, the per-chain switches apply.
-The wallet gets Earn markets from Epoch. This document does not configure markets.
+`features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`, and
+`nearIntents`. Each value must be a boolean; an omitted `nearIntents` defaults to
+`false`. `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
+until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
+configuration have been verified. Do not enable it with placeholder production
+URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
+Epoch transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer
+deposits and withdrawals. A false global switch disables new transfers even when
+a chain route is enabled. When a bridge switch is omitted, the per-chain switches apply.
+The `earn` section lists the Earn markets (see [Earn vaults](#earn-vaults)).
 
 `geo` contains the `wallet`, `earn` and `swap` location rules. The schema permits
 omitting `geo` for older documents, but the eligibility service requires an explicit
@@ -156,6 +163,12 @@ are `MIDEN`, `ETH`, `USDC`, and `BTC`. Optional `priceSymbol` values are `ETH`,
 boolean; when true, `launchAt` must be a valid UTC timestamp such as
 `2026-10-26T16:00:00Z`.
 
+`limits.bridgeInMaxBalanceUsd` is an optional number above zero: the most an
+account may hold, in US dollars, once a bridge-in lands. The wallet's deposit
+screen refuses a deposit that takes the receiving account's valued holdings past
+it. It is a gate on that screen only: a note that arrives any other way is not
+refused. A document with no `limits` section sets no ceiling.
+
 ## Guardian operators
 
 `guardians` is optional. It lists the Guardian operators of the network in
@@ -204,6 +217,75 @@ ignore the field and keep their own list.
 
 A Guardian has no switch: list an operator only when its endpoint is live.
 
+## Earn vaults
+
+`earn.vaults` lists the Epoch lending markets the Earn picker shows. The section
+exists exactly while `features.earn` is true: Earn on requires a non-empty list,
+and an `earn` section while Earn is off or `features.earn` is absent is refused,
+so a stale list cannot stay in the document.
+
+```json
+"earn": {
+  "vaults": [
+    {
+      "id": "aave-v3-base-usdc",
+      "marketUid": "AAVE_V3:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "name": "Aave V3 USDC",
+      "protocol": "1delta",
+      "logo": "icons/aave.svg"
+    }
+  ]
+}
+```
+
+| Field             | Meaning                                                                                                                                                                                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | Required. Unique in the list: a lower-case letter, then lower-case letters, digits and hyphens.                                                                                                                                                                 |
+| `marketUid`       | Required. Unique in the list. Epoch's market id `LENDER_KEY:chainId:underlying`: `LENDER_KEY` is upper-case letters, digits and `_`; `chainId` is the `chainId` of a `supportedEvmChains` entry with a `bridges.epoch` route; `underlying` is the lower-case 0x address of that route's `tokens.USDC.contractAddress`. |
+| `name`            | Required. The name the wallet shows (1 to 64 characters).                                                                                                                                                                                                       |
+| `protocol`        | Required. `1delta` or `dummy-lending`: the string Epoch hashes into `protocolHashIdentifier` (`keccak256(toBytes(protocol))`). Mainnet vaults use `1delta`.                                                                                                     |
+| `about`           | Optional. A description the wallet shows (at most 200 characters).                                                                                                                                                                                              |
+| `risk`            | Optional. `low`, `medium` or `high`.                                                                                                                                                                                                                            |
+| `depositsEnabled` | Optional boolean, default `true`. `false` marks a vault that takes no new deposits.                                                                                                                                                                              |
+| `logo`            | Optional. The path of a logo file in this repository, relative to the document: `icons/<name>.svg` or `icons/<name>.png`, where `<name>` is lower-case letters and digits in groups joined by single hyphens. Several vaults can name one file. |
+
+`name` and `about` are literal English text. The wallet shows them as written,
+in every language, and never translates them.
+
+### Vault logos
+
+The wallet fetches a `logo` from the directory it fetched the document from:
+`https://raw.githubusercontent.com/0xMiden/wallet-config/main/icons/aave.svg`
+for the published documents. When a vault has no `logo`, or the file cannot be
+fetched, the wallet draws the mark it bundles for the protocol, else the
+protocol's initial. Where each file comes from is in
+[`icons/README.md`](icons/README.md).
+
+The validator reads each named file from the repository, also with
+`--no-smoke`, and refuses the document when a file breaks one of these rules:
+
+- The file exists at the path, and it is at most 64 KiB (65,536 bytes).
+- A PNG starts with the PNG signature.
+- An SVG is UTF-8 text that starts with `<svg`, after an optional XML
+  declaration and whitespace.
+- An SVG contains no `<script`, no `<foreignObject`, no event handler attribute
+  (` on…=`), no `javascript:`, and no `href` or `xlink:href` whose value does
+  not start with `#`.
+
+So a logo cannot run code or load a remote resource. Give an SVG a square
+`viewBox` and no fixed `width` or `height` on its root, so the wallet can size
+it. Remove metadata, comments, `<title>`, `<desc>` and editor namespaces before
+you add a file.
+
+List order is the picker order. The first vault with deposits enabled is the
+default market. Do not sort the list.
+
+A market must lend the USDC of an Epoch route, so add the chain's `epoch` route
+to `supportedEvmChains` before you list a market on it. A vault the Epoch
+catalogue does not serve cannot be listed: for example, MetaMorpho vaults are
+not in the `/pools` catalogue, which lists only raw Morpho Blue markets
+(`MORPHO_BLUE_<market id>`).
+
 ## Validation and publication
 
 Use Node 22:
@@ -219,12 +301,25 @@ service health. Executor deposits also check the target contracts when its new
 transfer switches are off. It does not check Miden faucets or Circle service
 responses. Check these values before publication.
 
+While Earn is on, the final command also asks the Epoch catalogue for the
+markets of each lent token (`GET <positionsUrl>/pools?chainId=<id>&count=400&start=0&underlyings=<underlying>`)
+and fails when it does not serve a listed `marketUid` (compared in lower case).
+A host without the `/pools` route (testnet's) answers 404: the command then gives
+a warning that it cannot verify the markets, not an error. `--no-smoke` skips this
+check with the others.
+
 The final command also asks every listed Guardian for its key
 (`GET <endpoint>/pubkey?scheme=ecdsa`, the request the wallet makes). An
 operator that `main` does not list yet must answer. An operator already on
 `main` that does not answer gives a warning only. Two operators that serve one
 key fail. The command cannot tell who operates an endpoint: confirm that with
 the operator before publication.
+
+On `testnet.json` every failed live check (service health, Guardian keys, RPC
+chain ids and contract reads) is a warning: the command prints it with a `⚠`
+and a GitHub `::warning` annotation that shows on the pull request, and the
+check still passes. On `mainnet.json` and `devnet.json` they fail as described
+above. Schema and URL format errors fail on every network.
 
 Stage a route with both direction switches false. Enable it after its contracts
 and services are ready. Keep route data while transfers can need recovery.
