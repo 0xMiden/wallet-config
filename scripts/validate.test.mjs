@@ -13,12 +13,14 @@ import path from "node:path";
 import {
   parseBridgeConfig,
   parseBridgeConfigDetailed,
+  main,
   publishedGuardianEndpoints,
   validateFile,
   duplicateKeys,
   plannedChecks,
   smokeTest,
   versionError,
+  warningAnnotation,
 } from "./validate.mjs";
 const source = JSON.parse(
   readFileSync(new URL("../testnet.json", import.meta.url)),
@@ -631,22 +633,29 @@ test("reads the Guardian endpoints the base document lists, and none from a base
   assert.deepEqual(publishedGuardianEndpoints(base, "devnet"), []);
 });
 
-test("refuses a document whose new Guardian operator is down and passes one whose listed operator is down", async () => {
+/** The Guardian fixture as the document of `network`. */
+const guardianDocument = (network) => ({
+  ...readFixture("good", "testnet-guardians.json"),
+  network,
+});
+const KODA_DOWN = `Guardian kodax: ${KODA}/pubkey?scheme=ecdsa answered HTTP 503`;
+const kodaDown = () =>
+  guardianWorld({ [OZ]: healthyGuardians[OZ], [KODA]: 503 });
+
+test("on mainnet, refuses a document whose new Guardian operator is down and warns about a listed one", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "wallet-config-validate-"));
   try {
     writeFileSync(
-      path.join(root, "testnet.json"),
-      JSON.stringify(readFixture("good", "testnet-guardians.json")),
+      path.join(root, "mainnet.json"),
+      JSON.stringify(guardianDocument("mainnet")),
     );
-    const fetchImpl = guardianWorld({ [OZ]: healthyGuardians[OZ], [KODA]: 503 });
-    const added = await validateFile("testnet.json", {
+    const added = await validateFile("mainnet.json", {
       root,
       smoke: true,
-      fetchImpl,
+      fetchImpl: kodaDown(),
     });
-    assert.deepEqual(added.errors, [
-      `Guardian kodax: ${KODA}/pubkey?scheme=ecdsa answered HTTP 503`,
-    ]);
+    assert.deepEqual(added.errors, [KODA_DOWN]);
+    assert.deepEqual(added.warnings, []);
 
     // The same document as the base branch's: every operator is already published.
     for (const args of [
@@ -656,19 +665,102 @@ test("refuses a document whose new Guardian operator is down and passes one whos
     ]) {
       execFileSync("git", args, { cwd: root });
     }
-    const listed = await validateFile("testnet.json", {
+    const listed = await validateFile("mainnet.json", {
       root,
       smoke: true,
-      fetchImpl,
+      fetchImpl: kodaDown(),
       baseRef: "HEAD",
     });
     assert.deepEqual(listed.errors, []);
-    assert.ok(
-      listed.notes.includes(
-        `warning: Guardian kodax: ${KODA}/pubkey?scheme=ecdsa answered HTTP 503`,
-      ),
-    );
+    assert.deepEqual(listed.warnings, [KODA_DOWN]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("on testnet, only warns when a new Guardian operator is down", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "wallet-config-validate-"));
+  try {
+    writeFileSync(
+      path.join(root, "testnet.json"),
+      JSON.stringify(guardianDocument("testnet")),
+    );
+    const result = await validateFile("testnet.json", {
+      root,
+      smoke: true,
+      fetchImpl: kodaDown(),
+    });
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.warnings, [KODA_DOWN]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/** Runs the command line over `files` in a fresh directory and returns its exit code and output. */
+async function runMain(t, files, fetchImpl) {
+  const root = mkdtempSync(path.join(tmpdir(), "wallet-config-main-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (const [name, body] of Object.entries(files))
+    writeFileSync(path.join(root, name), JSON.stringify(body));
+  const lines = [];
+  const capture = (line) => lines.push(line);
+  t.mock.method(console, "log", capture);
+  t.mock.method(console, "error", capture);
+  try {
+    return { code: await main([], { root, baseRef: "", fetchImpl }), lines };
+  } finally {
+    t.mock.restoreAll();
+  }
+}
+
+test("exits 0 and prints the warning and its annotation when a testnet live check fails", async (t) => {
+  const { code, lines } = await runMain(
+    t,
+    { "testnet.json": guardianDocument("testnet") },
+    kodaDown(),
+  );
+  assert.equal(code, 0, lines.join("\n"));
+  assert.ok(lines.includes(`  ⚠ warning: ${KODA_DOWN}`), lines.join("\n"));
+  assert.ok(lines.includes(`::warning file=testnet.json::${KODA_DOWN}`));
+  assert.ok(!lines.some((line) => line.startsWith("  ✗")));
+});
+
+test("exits 1 when a mainnet live check fails", async (t) => {
+  const { code, lines } = await runMain(
+    t,
+    {
+      "mainnet.json": guardianDocument("mainnet"),
+      "testnet.json": guardianDocument("testnet"),
+    },
+    kodaDown(),
+  );
+  assert.equal(code, 1, lines.join("\n"));
+  const mainnet = lines.indexOf("\nmainnet.json");
+  const testnet = lines.indexOf("\ntestnet.json");
+  assert.ok(mainnet >= 0 && testnet > mainnet, lines.join("\n"));
+  const mainnetLines = lines.slice(mainnet, testnet);
+  const testnetLines = lines.slice(testnet);
+  assert.ok(mainnetLines.includes(`  ✗ ${KODA_DOWN}`), lines.join("\n"));
+  assert.ok(!mainnetLines.some((line) => line.startsWith("::warning")));
+  assert.ok(testnetLines.includes(`  ⚠ warning: ${KODA_DOWN}`));
+  assert.ok(!testnetLines.some((line) => line.startsWith("  ✗")));
+});
+
+test("exits 1 on a testnet schema error and makes no live check", async (t) => {
+  const body = guardianDocument("testnet");
+  body.guardians[0].endpoint = "http://guardian.example.com";
+  const { code, lines } = await runMain(t, { "testnet.json": body }, () => {
+    throw new Error("no live check may run");
+  });
+  assert.equal(code, 1);
+  assert.ok(lines.some((line) => line.startsWith("  ✗ ")), lines.join("\n"));
+  assert.ok(!lines.some((line) => line.startsWith("::warning")));
+});
+
+test("escapes an annotation so a message cannot end it early or start another", () => {
+  assert.equal(
+    warningAnnotation("a:b,c.json", "50% down\n::error::x"),
+    "::warning file=a%3Ab%2Cc.json::50%25 down%0A::error::x",
+  );
 });

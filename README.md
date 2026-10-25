@@ -217,6 +217,12 @@ operator that `main` does not list yet must answer. An operator already on
 key fail. The command cannot tell who operates an endpoint: confirm that with
 the operator before publication.
 
+On `testnet.json` every failed live check (service health, Guardian keys, RPC
+chain ids and contract reads) is a warning: the command prints it with a `⚠`
+and a GitHub `::warning` annotation that shows on the pull request, and the
+check still passes. On `mainnet.json` and `devnet.json` they fail as described
+above. Schema and URL format errors fail on every network.
+
 Stage a route with both direction switches false. Enable it after its contracts
 and services are ready. Keep route data while transfers can need recovery.
 
