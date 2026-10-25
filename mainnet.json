@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 10,
+  "version": 11,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
