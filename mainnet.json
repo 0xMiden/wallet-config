@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 11,
+  "version": 12,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
@@ -193,6 +193,12 @@
             },
             "PYUSD": {
               "contractAddress": "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
+            },
+            "USDG": {
+              "contractAddress": "0xe343167631d89B6Ffc58B88d6b7fB0228795491D"
+            },
+            "POL": {
+              "contractAddress": "0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6"
             }
           }
         },
