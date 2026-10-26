@@ -1294,6 +1294,10 @@ export async function evmRpc(chainId, method, params, fetchImpl) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
       });
+      if (res.status !== 200) {
+        failures.push(`${url}: HTTP ${res.status}`);
+        continue;
+      }
       const body = await res.json();
       if (isRecord(body) && typeof body.result === "string") return body.result;
       failures.push(
