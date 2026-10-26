@@ -732,14 +732,7 @@ test("reads the Earn vaults in document order with deposits on by default", () =
   const config = parseBridgeConfig(mainnetCopy(), "mainnet");
   assert.deepEqual(
     config.earn.vaults.map((vault) => vault.id),
-    [
-      "aave-v3-arbitrum-usdc",
-      "compound-v3-arbitrum-usdc",
-      "aave-v3-base-usdc",
-      "compound-v3-base-usdc",
-      "aave-v3-ethereum-usdc",
-      "compound-v3-ethereum-usdc",
-    ],
+    ["aave-v3-arbitrum-usdc", "aave-v3-base-usdc", "aave-v3-ethereum-usdc"],
   );
   assert.deepEqual(config.earn.vaults[0], {
     id: "aave-v3-arbitrum-usdc",
@@ -967,10 +960,7 @@ test("plans one catalogue check per lent token, and none while Earn is off", () 
       [1, ETHEREUM_USDC],
     ].map(([chainId, underlying]) => ({
       url: `${POSITIONS}/pools?chainId=${chainId}&count=400&start=0&underlyings=${underlying}`,
-      marketUids: [
-        `AAVE_V3:${chainId}:${underlying}`,
-        `COMPOUND_V3_USDC:${chainId}:${underlying}`,
-      ],
+      marketUids: [`AAVE_V3:${chainId}:${underlying}`],
     })),
   );
   const off = mainnetCopy();
@@ -1028,7 +1018,7 @@ test("passes the catalogue check when Epoch serves every listed market, in any c
 
 test("fails the catalogue check when Epoch does not serve a listed market", async () => {
   const config = poolsOnly(parseBridgeConfig(mainnetCopy(), "mainnet"));
-  const missing = `COMPOUND_V3_USDC:8453:${BASE_USDC}`;
+  const missing = `AAVE_V3:8453:${BASE_USDC}`;
   const results = (
     await smokeTest(
       config,
@@ -1110,14 +1100,7 @@ test("reads the published vault logos, and several vaults share one file", () =>
   const vaults = parseBridgeConfig(mainnetCopy(), "mainnet").earn.vaults;
   assert.deepEqual(
     vaults.map((vault) => vault.logo),
-    [
-      "icons/aave.svg",
-      "icons/compound.svg",
-      "icons/aave.svg",
-      "icons/compound.svg",
-      "icons/aave.svg",
-      "icons/compound.svg",
-    ],
+    ["icons/aave.svg", "icons/aave.svg", "icons/aave.svg"],
   );
   for (const file of ["aave", "compound", "morpho"]) {
     const logo = `icons/${file}.svg`;
@@ -1279,7 +1262,7 @@ test("--no-smoke reads each logo from the document's repository", async () => {
   try {
     writeFileSync(path.join(root, "mainnet.json"), JSON.stringify(mainnetCopy()));
     mkdirSync(path.join(root, "icons"));
-    writeFileSync(path.join(root, "icons/aave.svg"), PLAIN_SVG);
+    writeFileSync(path.join(root, "icons/compound.svg"), PLAIN_SVG);
     const result = await validateFile("mainnet.json", {
       root,
       smoke: false,
@@ -1289,9 +1272,9 @@ test("--no-smoke reads each logo from the document's repository", async () => {
     });
     assert.deepEqual(
       result.errors,
-      [1, 3, 5].map(
+      [0, 1, 2].map(
         (index) =>
-          `earn.vaults[${index}].logo names icons/compound.svg, which is not a file in the repository`,
+          `earn.vaults[${index}].logo names icons/aave.svg, which is not a file in the repository`,
       ),
     );
   } finally {
