@@ -13,8 +13,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  EVM_RPCS,
   MAX_EARN_VAULT_LOGO_BYTES,
   earnLogoErrors,
+  evmRpc,
   parseBridgeConfig,
   parseBridgeConfigDetailed,
   main,
@@ -292,6 +294,7 @@ test("smoke checks use the route chain and skip disabled routes", async () => {
     true;
   assert.ok(plannedChecks(body).every((check) => check.chainId === 84532));
   const result = await smokeTest(body, async (url, init) => ({
+    status: 200,
     json: async () => ({
       result:
         JSON.parse(init.body).method === "eth_chainId" ? "0x14a34" : "0x1234",
@@ -380,6 +383,7 @@ test("smoke checks report contract and service failures", async (t) => {
             result = scenario === "empty code" ? "0x" : "0x1234";
         }
         return {
+          status: 200,
           json: async () =>
             scenario === "RPC error"
               ? { error: { message: "unavailable" } }
@@ -1507,4 +1511,43 @@ test("HTTP 502 warnings cannot hide missing Earn markets in a successful respons
   assert.equal(lines.filter((line) => line.startsWith("  ✗ Earn markets")).length, 3);
   assert.equal(lines.filter((line) => line.startsWith("  ⚠ warning:")).length, 3);
   assert.ok(lines.some((line) => line.includes("does not serve AAVE_V3:")));
+});
+
+test("success-shaped HTTP 502 is not an RPC answer", async (t) => {
+  await t.test("chain, code, and uint stay failed", async () => {
+    const config = parseBridgeConfig(serviceDocument(), "mainnet");
+    const checks = plannedChecks(config).filter((check) => check.kind.startsWith("evm-"));
+    assert.deepEqual([...new Set(checks.map((check) => check.kind))].sort(),
+      ["evm-chain", "evm-code", "evm-uint"]);
+    const results = await smokeTest(config, async (url, init = {}) => {
+      if (init.method === "POST") {
+        const { method } = JSON.parse(init.body);
+        const result = method === "eth_chainId" ? "0x1"
+          : method === "eth_call" ? `0x${"0".repeat(63)}6` : "0x1234";
+        return Response.json({ jsonrpc: "2.0", id: 1, result }, { status: 502 });
+      }
+      return Response.json({
+        status: String(url).endsWith("/healthz") ? "SERVING" : "healthy",
+        ok: true,
+        data: { items: allMainnetUids.map((marketUid) => ({ marketUid })) },
+      });
+    });
+    for (const check of checks) {
+      const entry = results.find((result) => result.label === (check.label ?? check.key));
+      assert.equal(entry.ok, false, check.key);
+      assert.equal(entry.advisory, false, check.key);
+      for (const url of EVM_RPCS[check.chainId])
+        assert.ok(entry.detail.includes(`${url}: HTTP 502`), entry.detail);
+    }
+  });
+  await t.test("a later HTTP 200 answer is used", async () => {
+    const urls = [];
+    const answered = await evmRpc(5042, "eth_chainId", [], async (url) => {
+      urls.push(url);
+      return Response.json({ jsonrpc: "2.0", id: 1, result: urls.length === 1 ? "0x11" : "0x22" },
+        { status: urls.length === 1 ? 502 : 200 });
+    });
+    assert.equal(answered, "0x22");
+    assert.deepEqual(urls, EVM_RPCS[5042]);
+  });
 });
