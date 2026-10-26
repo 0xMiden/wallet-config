@@ -98,8 +98,8 @@
   },
   "bridge-providers": {
     "epoch": {
-      "allocatorUrl": "https://miden-smallocator.epochprotocol.xyz",
-      "positionsUrl": "https://miden-integration-example.epochprotocol.xyz/onedelta"
+      "allocatorUrl": "https://mainnet-api.epochprotocol.xyz",
+      "positionsUrl": "https://positions-mainnet.epochprotocol.xyz"
     },
     "agglayer": {
       "indexerUrl": "https://bridge-cedar-miden.eu-north-3.gateway.fm/api"

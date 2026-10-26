@@ -718,7 +718,7 @@ const mainnetErrors = (body) =>
 const BASE_USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 const ARBITRUM_USDC = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
 const ETHEREUM_USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
-const POSITIONS = "https://miden-integration-example.epochprotocol.xyz/onedelta";
+const POSITIONS = "https://positions-mainnet.epochprotocol.xyz";
 /** The mainnet document with one vault changed by `change`. */
 const withVault = (change) => {
   const body = mainnetCopy();
