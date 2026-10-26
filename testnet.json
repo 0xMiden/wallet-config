@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 15,
+  "version": 16,
   "evm": {
     "chainId": 11155111
   },
@@ -18,7 +18,7 @@
   },
   "mainnetCountdown": {
     "enabled": true,
-    "launchAt": "2026-10-26T14:00:00Z"
+    "launchAt": "2026-10-26T13:00:00Z"
   },
   "onboarding": {
     "inviteOnly": false
