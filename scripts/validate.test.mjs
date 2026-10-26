@@ -406,6 +406,38 @@ test("preserves the published feature keys and validates their boolean values", 
   }
 });
 
+test("the Arcade GC sale exists exactly while its switch is on and names the seller", () => {
+  const mainnet = JSON.parse(
+    readFileSync(new URL("../mainnet.json", import.meta.url)),
+  );
+  const parsed = parseBridgeConfigDetailed(mainnet, "mainnet");
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.config.features.arcadeGcPurchase, true);
+  assert.deepEqual(parsed.config.arcade, {
+    sale: { seller: "0xa6be5c4d8fdc03415bde66453d5f91" },
+  });
+
+  const off = copy();
+  assert.equal(
+    parseBridgeConfigDetailed(off, "testnet").config.features.arcadeGcPurchase,
+    false,
+  );
+  off.arcade = { sale: { seller: "0xa6be5c4d8fdc03415bde66453d5f91" } };
+  assert.ok(errors(off).some((error) => error.includes("arcade must be omitted")));
+
+  const on = copy();
+  on.features.arcadeGcPurchase = true;
+  assert.ok(errors(on).some((error) => error.includes("arcade.sale is required")));
+  on.arcade = { sale: {} };
+  assert.ok(errors(on).some((error) => error.includes("arcade.sale.seller is required")));
+  on.arcade = { sale: { seller: "mm1azntuhzd3lwqxs2mmeny202ljy3fxnpm" } };
+  assert.ok(errors(on).some((error) => error.includes("arcade.sale.seller")));
+  on.arcade = { sale: { seller: "0xa6be5c4d8fdc03415bde66453d5f91" } };
+  assert.deepEqual(errors(on), []);
+  on.features.arcadeGcPurchase = "true";
+  assert.ok(errors(on).some((error) => error.includes("features.arcadeGcPurchase")));
+});
+
 test("nearIntents defaults off and accepts only explicit booleans", () => {
   const body = copy();
   delete body.features.nearIntents;

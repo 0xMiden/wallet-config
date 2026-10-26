@@ -16,9 +16,11 @@ the solver's `/v2/pairs` endpoint.
 
 ## Bridge configuration
 
-`features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`, and
-`nearIntents`. Each value must be a boolean; an omitted `nearIntents` defaults to
-`false`. `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
+`features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`,
+`nearIntents` and `arcadeGcPurchase`. Each value must be a boolean; an omitted
+`nearIntents` or `arcadeGcPurchase` defaults to `false`. `arcadeGcPurchase`
+turns on buying Game Coins in Arcade and requires the `arcade` section (see
+[Arcade GC sale](#arcade-gc-sale)). `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
 until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
 configuration have been verified. Do not enable it with placeholder production
 URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
@@ -155,6 +157,17 @@ account may hold, in US dollars, once a bridge-in lands. The wallet's deposit
 screen refuses a deposit that takes the receiving account's valued holdings past
 it. It is a gate on that screen only: a note that arrives any other way is not
 refused. A document with no `limits` section sets no ceiling.
+
+## Arcade GC sale
+
+`arcade.sale.seller` names the account whose public PSWAP note sells Game Coins:
+a 15-byte `0x` account id. The section exists exactly while
+`features.arcadeGcPurchase` is true: the switch on requires it, and an `arcade`
+section while the switch is off or absent is refused. It is the one trust
+decision the document makes for the Arcade purchase: the wallet finds the live
+sale note on chain by the tag the PSWAP script derives from the GC and USDCx
+faucets, prices a purchase from the note's own terms, and accepts only a note
+whose creator is this seller. Nothing else about the sale is configured here.
 
 ## Guardian operators
 
