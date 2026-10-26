@@ -1188,7 +1188,11 @@ async function httpHealth(check, fetchImpl) {
     headers: { accept: "application/json" },
   });
   if (res.status !== 200)
-    return { ok: false, detail: `${check.url} answered HTTP ${res.status}` };
+    return {
+      ok: false,
+      advisory: res.status === 502,
+      detail: `${check.url} answered HTTP ${res.status}`,
+    };
   let body;
   try {
     body = await res.json();
@@ -1246,7 +1250,11 @@ async function earnPools(check, fetchImpl) {
       detail: `${check.url} answered HTTP 404, so the host has no /pools route and ${check.marketUids.join(", ")} cannot be verified`,
     };
   if (res.status !== 200)
-    return { ok: false, detail: `${check.url} answered HTTP ${res.status}` };
+    return {
+      ok: false,
+      advisory: res.status === 502,
+      detail: `${check.url} answered HTTP ${res.status}`,
+    };
   let body;
   try {
     body = await res.json();

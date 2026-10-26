@@ -315,6 +315,12 @@ operator that `main` does not list yet must answer. An operator already on
 key fail. The command cannot tell who operates an endpoint: confirm that with
 the operator before publication.
 
+An HTTP 502 response from a service-health or Earn catalogue request is a warning
+on every network. The log and pull-request annotation retain the service and exact
+URL/status. This exception does not cover other HTTP statuses, DNS or TLS errors,
+invalid JSON, unhealthy successful responses, missing markets, Guardian keys, RPC
+chain ids or contract reads. Their existing failure rules still apply.
+
 On `testnet.json` every failed live check (service health, Guardian keys, RPC
 chain ids and contract reads) is a warning: the command prints it with a `⚠`
 and a GitHub `::warning` annotation that shows on the pull request, and the
