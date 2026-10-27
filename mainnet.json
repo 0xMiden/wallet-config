@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 12,
+  "version": 13,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
@@ -50,7 +50,13 @@
     "fastBridge": false,
     "bridgeIn": true,
     "bridgeOut": true,
-    "nearIntents": false
+    "nearIntents": false,
+    "arcadeGcPurchase": true
+  },
+  "arcade": {
+    "sale": {
+      "seller": "0xa6be5c4d8fdc03415bde66453d5f91"
+    }
   },
   "earn": {
     "vaults": [

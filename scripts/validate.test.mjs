@@ -13,8 +13,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  EVM_RPCS,
   MAX_EARN_VAULT_LOGO_BYTES,
   earnLogoErrors,
+  evmRpc,
   parseBridgeConfig,
   parseBridgeConfigDetailed,
   main,
@@ -292,6 +294,7 @@ test("smoke checks use the route chain and skip disabled routes", async () => {
     true;
   assert.ok(plannedChecks(body).every((check) => check.chainId === 84532));
   const result = await smokeTest(body, async (url, init) => ({
+    status: 200,
     json: async () => ({
       result:
         JSON.parse(init.body).method === "eth_chainId" ? "0x14a34" : "0x1234",
@@ -380,6 +383,7 @@ test("smoke checks report contract and service failures", async (t) => {
             result = scenario === "empty code" ? "0x" : "0x1234";
         }
         return {
+          status: 200,
           json: async () =>
             scenario === "RPC error"
               ? { error: { message: "unavailable" } }
@@ -404,6 +408,38 @@ test("preserves the published feature keys and validates their boolean values", 
     body.features[name] = "true";
     assert.ok(errors(body).some(error => error.includes(`features.${name}`)));
   }
+});
+
+test("the Arcade GC sale exists exactly while its switch is on and names the seller", () => {
+  const mainnet = JSON.parse(
+    readFileSync(new URL("../mainnet.json", import.meta.url)),
+  );
+  const parsed = parseBridgeConfigDetailed(mainnet, "mainnet");
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.config.features.arcadeGcPurchase, true);
+  assert.deepEqual(parsed.config.arcade, {
+    sale: { seller: "0xa6be5c4d8fdc03415bde66453d5f91" },
+  });
+
+  const off = copy();
+  assert.equal(
+    parseBridgeConfigDetailed(off, "testnet").config.features.arcadeGcPurchase,
+    false,
+  );
+  off.arcade = { sale: { seller: "0xa6be5c4d8fdc03415bde66453d5f91" } };
+  assert.ok(errors(off).some((error) => error.includes("arcade must be omitted")));
+
+  const on = copy();
+  on.features.arcadeGcPurchase = true;
+  assert.ok(errors(on).some((error) => error.includes("arcade.sale is required")));
+  on.arcade = { sale: {} };
+  assert.ok(errors(on).some((error) => error.includes("arcade.sale.seller is required")));
+  on.arcade = { sale: { seller: "mm1azntuhzd3lwqxs2mmeny202ljy3fxnpm" } };
+  assert.ok(errors(on).some((error) => error.includes("arcade.sale.seller")));
+  on.arcade = { sale: { seller: "0xa6be5c4d8fdc03415bde66453d5f91" } };
+  assert.deepEqual(errors(on), []);
+  on.features.arcadeGcPurchase = "true";
+  assert.ok(errors(on).some((error) => error.includes("features.arcadeGcPurchase")));
 });
 
 test("nearIntents defaults off and accepts only explicit booleans", () => {
@@ -1365,4 +1401,153 @@ test("escapes an annotation so a message cannot end it early or start another", 
     warningAnnotation("a:b,c.json", "50% down\n::error::x"),
     "::warning file=a%3Ab%2Cc.json::50%25 down%0A::error::x",
   );
+});
+
+function serviceDocument() {
+  const body = mainnetCopy();
+  delete body.guardians;
+  for (const vault of body.earn.vaults) delete vault.logo;
+  for (const chain of Object.values(body.supportedEvmChains))
+    for (const bridge of Object.values(chain.bridges)) {
+      bridge.depositEnabled = false;
+      bridge.withdrawalEnabled = false;
+    }
+  body.supportedEvmChains.ethereum.bridges.agglayer.depositEnabled = true;
+  return body;
+}
+
+function serviceWorld(reply) {
+  return async (url, init = {}) => {
+    if (init.method !== "POST") return reply(String(url));
+    const { method } = JSON.parse(init.body);
+    return Response.json({
+      result: method === "eth_chainId" ? "0x1"
+        : method === "eth_call" ? `0x${"0".repeat(63)}6` : "0x1234",
+    });
+  };
+}
+
+test("only HTTP 502 service health and Earn pools responses are advisory", async (t) => {
+  const config = parseBridgeConfig(serviceDocument(), "mainnet");
+  const checks = plannedChecks(config).filter(
+    (check) => check.kind === "http" || check.kind === "earn-pools",
+  );
+  assert.equal(checks.length, 6);
+  assert.deepEqual(checks.filter((check) => check.kind === "http").map((check) => check.key).sort(),
+    ["allocator", "indexer", "positions"]);
+  for (const status of [502, 500, 503, 526]) {
+    await t.test(`HTTP ${status}`, async () => {
+      const results = await smokeTest(config, serviceWorld(
+        () => new Response("upstream unavailable", { status }),
+      ));
+      for (const check of checks) {
+        const result = results.find((entry) => entry.label === (check.label ?? check.key));
+        assert.equal(result.ok, false);
+        assert.equal(result.advisory, status === 502, check.url);
+        assert.equal(result.detail, `${check.url} answered HTTP ${status}`);
+      }
+      assert.ok(results.filter((entry) => !checks.some(
+        (check) => entry.label === (check.label ?? check.key),
+      )).every((entry) => entry.ok));
+    });
+  }
+});
+
+test("transport and semantic errors cannot qualify by mentioning HTTP 502", async (t) => {
+  const config = parseBridgeConfig(serviceDocument(), "mainnet");
+  for (const [name, reply] of [
+    ["DNS", () => { throw new Error("DNS failure: HTTP 502"); }],
+    ["TLS", () => { throw new Error("TLS failure: HTTP 502"); }],
+    ["invalid JSON", () => new Response("HTTP 502", { status: 200 })],
+    ["unhealthy payload", () => Response.json({ status: "HTTP 502", ok: false })],
+  ]) {
+    await t.test(name, async () => {
+      const results = await smokeTest(config, serviceWorld(reply));
+      const failed = results.filter((entry) => !entry.ok);
+      assert.equal(failed.length, 6);
+      assert.ok(failed.every((entry) => entry.advisory === false));
+    });
+  }
+});
+
+test("HTTP 502 RPC and new Guardian failures remain blocking", async () => {
+  const config = parseBridgeConfig(serviceDocument(), "mainnet");
+  const results = await smokeTest(config,
+    async () => new Response("upstream unavailable", { status: 502 }));
+  const chain = results.find((entry) => entry.label === "chain:1");
+  assert.equal(chain.ok, false);
+  assert.equal(chain.advisory, false);
+  assert.match(chain.detail, /no RPC for chain 1 answered/);
+  const guardians = await smokeTest(guardianFixture(),
+    guardianWorld({ [OZ]: 502, [KODA]: 502 }));
+  assert.equal(guardians.length, 2);
+  assert.ok(guardians.every((entry) => !entry.ok && !entry.advisory));
+  assert.ok(guardians.every((entry) => entry.detail.endsWith("answered HTTP 502")));
+});
+
+test("HTTP 502 warnings preserve exact diagnostics and annotations without failing the CLI", async (t) => {
+  const body = serviceDocument();
+  const checks = plannedChecks(parseBridgeConfig(body, "mainnet")).filter(
+    (check) => check.kind === "http" || check.kind === "earn-pools",
+  );
+  const { code, lines } = await runMain(t, { "mainnet.json": body },
+    serviceWorld(() => new Response("upstream unavailable", { status: 502 })));
+  assert.equal(code, 0, lines.join("\n"));
+  assert.equal(checks.length, 6);
+  for (const check of checks) {
+    const detail = `${check.label ?? check.key}: ${check.url} answered HTTP 502`;
+    assert.ok(lines.includes(`  ⚠ warning: ${detail}`), detail);
+    assert.ok(lines.includes(warningAnnotation("mainnet.json", detail)), detail);
+  }
+  assert.ok(!lines.some((line) => line.startsWith("  ✗")), lines.join("\n"));
+});
+
+test("HTTP 502 warnings cannot hide missing Earn markets in a successful response", async (t) => {
+  const { code, lines } = await runMain(t, { "mainnet.json": serviceDocument() },
+    serviceWorld((url) => url.includes("/pools?")
+      ? Response.json({ success: true, data: { items: [] } })
+      : new Response("upstream unavailable", { status: 502 })));
+  assert.equal(code, 1, lines.join("\n"));
+  assert.equal(lines.filter((line) => line.startsWith("  ✗ Earn markets")).length, 3);
+  assert.equal(lines.filter((line) => line.startsWith("  ⚠ warning:")).length, 3);
+  assert.ok(lines.some((line) => line.includes("does not serve AAVE_V3:")));
+});
+
+test("success-shaped HTTP 502 is not an RPC answer", async (t) => {
+  await t.test("chain, code, and uint stay failed", async () => {
+    const config = parseBridgeConfig(serviceDocument(), "mainnet");
+    const checks = plannedChecks(config).filter((check) => check.kind.startsWith("evm-"));
+    assert.deepEqual([...new Set(checks.map((check) => check.kind))].sort(),
+      ["evm-chain", "evm-code", "evm-uint"]);
+    const results = await smokeTest(config, async (url, init = {}) => {
+      if (init.method === "POST") {
+        const { method } = JSON.parse(init.body);
+        const result = method === "eth_chainId" ? "0x1"
+          : method === "eth_call" ? `0x${"0".repeat(63)}6` : "0x1234";
+        return Response.json({ jsonrpc: "2.0", id: 1, result }, { status: 502 });
+      }
+      return Response.json({
+        status: String(url).endsWith("/healthz") ? "SERVING" : "healthy",
+        ok: true,
+        data: { items: allMainnetUids.map((marketUid) => ({ marketUid })) },
+      });
+    });
+    for (const check of checks) {
+      const entry = results.find((result) => result.label === (check.label ?? check.key));
+      assert.equal(entry.ok, false, check.key);
+      assert.equal(entry.advisory, false, check.key);
+      for (const url of EVM_RPCS[check.chainId])
+        assert.ok(entry.detail.includes(`${url}: HTTP 502`), entry.detail);
+    }
+  });
+  await t.test("a later HTTP 200 answer is used", async () => {
+    const urls = [];
+    const answered = await evmRpc(5042, "eth_chainId", [], async (url) => {
+      urls.push(url);
+      return Response.json({ jsonrpc: "2.0", id: 1, result: urls.length === 1 ? "0x11" : "0x22" },
+        { status: urls.length === 1 ? 502 : 200 });
+    });
+    assert.equal(answered, "0x22");
+    assert.deepEqual(urls, EVM_RPCS[5042]);
+  });
 });

@@ -270,6 +270,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     "bridgeIn",
     "bridgeOut",
     "nearIntents",
+    "arcadeGcPurchase",
   ];
   for (const name of featureNames) {
     if (featuresIn[name] !== undefined && typeof featuresIn[name] !== "boolean")
@@ -481,6 +482,11 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     options.allowLocalHttp === true,
     errors,
   );
+  const arcade = readArcade(
+    body.arcade,
+    featuresIn.arcadeGcPurchase === true,
+    errors,
+  );
   const onboarding = readSection(body, "onboarding", errors);
   if (
     onboarding.inviteOnly !== undefined &&
@@ -505,6 +511,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
             ...featuresIn,
             earn: featuresIn.earn === true,
             nearIntents: featuresIn.nearIntents === true,
+            arcadeGcPurchase: featuresIn.arcadeGcPurchase === true,
           },
           "bridge-providers": providers,
           supportedEvmChains: chains,
@@ -514,6 +521,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           limits,
           ...(guardians === undefined ? {} : { guardians }),
           ...(earn === undefined ? {} : { earn }),
+          ...(arcade === undefined ? {} : { arcade }),
         },
     errors,
     dropped,
@@ -738,6 +746,42 @@ function readGuardianText(entry, label, field, maxLength, errors) {
   if (entry[field] === undefined) return {};
   const value = readGuardianLabel(entry, label, field, errors, maxLength);
   return value === undefined ? {} : { [field]: value };
+}
+
+/**
+ * The wallet's Arcade GC sale (schema.ts readArcade): the account whose public PSWAP note sells Game
+ * Coins, which the wallet finds on chain by the note's tag. The section exists exactly while
+ * `features.arcadeGcPurchase` is on, so a stale seller cannot linger behind a switched-off feature.
+ * The seller is the one trust decision the document makes here: the GC faucet, the price and the
+ * live note all come from the chain.
+ */
+function readArcade(value, purchaseOn, errors) {
+  if (value === undefined) {
+    if (purchaseOn)
+      errors.push("arcade.sale is required while features.arcadeGcPurchase is on");
+    return undefined;
+  }
+  if (!purchaseOn)
+    errors.push("arcade must be omitted while features.arcadeGcPurchase is off");
+  if (!isRecord(value)) {
+    errors.push("arcade must be an object");
+    return undefined;
+  }
+  if (!isRecord(value.sale)) {
+    errors.push("arcade.sale must be an object");
+    return undefined;
+  }
+  const seller = readPattern(
+    value.sale,
+    "arcade.sale",
+    "seller",
+    MIDEN_ACCOUNT_ID,
+    "a 15-byte 0x account id",
+    errors,
+  );
+  if (seller === undefined && value.sale.seller === undefined)
+    errors.push("arcade.sale.seller is required");
+  return seller === undefined ? undefined : { sale: { seller } };
 }
 
 /**
@@ -1144,7 +1188,11 @@ async function httpHealth(check, fetchImpl) {
     headers: { accept: "application/json" },
   });
   if (res.status !== 200)
-    return { ok: false, detail: `${check.url} answered HTTP ${res.status}` };
+    return {
+      ok: false,
+      advisory: res.status === 502,
+      detail: `${check.url} answered HTTP ${res.status}`,
+    };
   let body;
   try {
     body = await res.json();
@@ -1202,7 +1250,11 @@ async function earnPools(check, fetchImpl) {
       detail: `${check.url} answered HTTP 404, so the host has no /pools route and ${check.marketUids.join(", ")} cannot be verified`,
     };
   if (res.status !== 200)
-    return { ok: false, detail: `${check.url} answered HTTP ${res.status}` };
+    return {
+      ok: false,
+      advisory: res.status === 502,
+      detail: `${check.url} answered HTTP ${res.status}`,
+    };
   let body;
   try {
     body = await res.json();
@@ -1242,6 +1294,10 @@ export async function evmRpc(chainId, method, params, fetchImpl) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
       });
+      if (res.status !== 200) {
+        failures.push(`${url}: HTTP ${res.status}`);
+        continue;
+      }
       const body = await res.json();
       if (isRecord(body) && typeof body.result === "string") return body.result;
       failures.push(
