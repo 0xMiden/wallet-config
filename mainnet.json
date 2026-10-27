@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 13,
+  "version": 15,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
@@ -46,36 +46,17 @@
     }
   ],
   "features": {
-    "earn": true,
+    "earn": false,
     "fastBridge": false,
     "bridgeIn": true,
     "bridgeOut": true,
-    "nearIntents": false
+    "nearIntents": false,
+    "arcadeGcPurchase": true
   },
-  "earn": {
-    "vaults": [
-      {
-        "id": "aave-v3-arbitrum-usdc",
-        "marketUid": "AAVE_V3:42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831",
-        "name": "Aave V3 USDC",
-        "protocol": "1delta",
-        "logo": "icons/aave.svg"
-      },
-      {
-        "id": "aave-v3-base-usdc",
-        "marketUid": "AAVE_V3:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-        "name": "Aave V3 USDC",
-        "protocol": "1delta",
-        "logo": "icons/aave.svg"
-      },
-      {
-        "id": "aave-v3-ethereum-usdc",
-        "marketUid": "AAVE_V3:1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        "name": "Aave V3 USDC",
-        "protocol": "1delta",
-        "logo": "icons/aave.svg"
-      }
-    ]
+  "arcade": {
+    "sale": {
+      "seller": "0xa6be5c4d8fdc03415bde66453d5f91"
+    }
   },
   "geo": {
     "wallet": {
