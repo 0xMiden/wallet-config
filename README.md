@@ -7,10 +7,10 @@ A changed document must have a higher `version`. The `network` must match the fi
 Testnet is fully configured. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
-Mainnet Earn is off: the document lists no Earn vaults, so the wallet accepts
-no new Earn deposits while existing positions can still withdraw. The Epoch
-routes on Arbitrum, Base and Ethereum stay in place. Epoch fast bridge transfers
-(`fastBridge`) and NEAR intents stay off. Mainnet Swap uses
+Mainnet Earn is on: it lists the Aave V3 USDC vaults on Base and Ethereum,
+through the Epoch routes on those chains, each with the Aave logo from
+`icons/`. The Arbitrum Epoch route stays, but lists no Earn vault. Epoch fast bridge transfers (`fastBridge`) and NEAR intents stay
+off. Mainnet Swap uses
 `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 

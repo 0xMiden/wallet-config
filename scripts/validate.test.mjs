@@ -748,28 +748,13 @@ test("on testnet, only warns when a new Guardian operator is down", async () => 
 const mainnet = JSON.parse(
   readFileSync(new URL("../mainnet.json", import.meta.url)),
 );
-/** The Earn vaults mainnet listed while Earn was on; the Earn tests exercise the validator with them. */
-const MAINNET_EARN_VAULTS = [
-  ["aave-v3-arbitrum-usdc", "AAVE_V3:42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831", "Aave V3 USDC", "icons/aave.svg"],
-  ["compound-v3-arbitrum-usdc", "COMPOUND_V3_USDC:42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831", "Compound III USDC", "icons/compound.svg"],
-  ["aave-v3-base-usdc", "AAVE_V3:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "Aave V3 USDC", "icons/aave.svg"],
-  ["compound-v3-base-usdc", "COMPOUND_V3_USDC:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "Compound III USDC", "icons/compound.svg"],
-  ["aave-v3-ethereum-usdc", "AAVE_V3:1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "Aave V3 USDC", "icons/aave.svg"],
-  ["compound-v3-ethereum-usdc", "COMPOUND_V3_USDC:1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "Compound III USDC", "icons/compound.svg"],
-].map(([id, marketUid, name, logo]) => ({ id, marketUid, name, protocol: "1delta", logo }));
-/** The published mainnet document with Earn turned on and the vaults listed. */
-const mainnetCopy = () => {
-  const body = structuredClone(mainnet);
-  body.features.earn = true;
-  body.earn = { vaults: structuredClone(MAINNET_EARN_VAULTS) };
-  return body;
-};
+const mainnetCopy = () => structuredClone(mainnet);
 const mainnetErrors = (body) =>
   parseBridgeConfigDetailed(body, "mainnet").errors;
 const BASE_USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 const ARBITRUM_USDC = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
 const ETHEREUM_USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
-const POSITIONS = "https://miden-integration-example.epochprotocol.xyz/onedelta";
+const POSITIONS = "https://positions-mainnet.epochprotocol.xyz";
 /** The mainnet document with one vault changed by `change`. */
 const withVault = (change) => {
   const body = mainnetCopy();
@@ -783,18 +768,11 @@ test("reads the Earn vaults in document order with deposits on by default", () =
   const config = parseBridgeConfig(mainnetCopy(), "mainnet");
   assert.deepEqual(
     config.earn.vaults.map((vault) => vault.id),
-    [
-      "aave-v3-arbitrum-usdc",
-      "compound-v3-arbitrum-usdc",
-      "aave-v3-base-usdc",
-      "compound-v3-base-usdc",
-      "aave-v3-ethereum-usdc",
-      "compound-v3-ethereum-usdc",
-    ],
+    ["aave-v3-base-usdc", "aave-v3-ethereum-usdc"],
   );
   assert.deepEqual(config.earn.vaults[0], {
-    id: "aave-v3-arbitrum-usdc",
-    marketUid: `AAVE_V3:42161:${ARBITRUM_USDC}`,
+    id: "aave-v3-base-usdc",
+    marketUid: `AAVE_V3:8453:${BASE_USDC}`,
     name: "Aave V3 USDC",
     protocol: "1delta",
     depositsEnabled: true,
@@ -862,7 +840,7 @@ test("refuses a vault id that is not a lower-case slug, and a repeated id", () =
   );
   const repeated = mainnetCopy();
   repeated.earn.vaults[1].id = repeated.earn.vaults[0].id;
-  assert.ok(hasError(repeated, "earn.vaults names id aave-v3-arbitrum-usdc twice"));
+  assert.ok(hasError(repeated, "earn.vaults names id aave-v3-base-usdc twice"));
 });
 
 test("refuses a market uid that is not LENDER_KEY:chainId:underlying", () => {
@@ -909,8 +887,8 @@ test("refuses a market on a chain without an Epoch route", () => {
     ),
   );
   const unrouted = mainnetCopy();
-  delete unrouted.supportedEvmChains.arbitrum.bridges.epoch;
-  assert.ok(hasError(unrouted, "names chain 42161, which has no Epoch route"));
+  delete unrouted.supportedEvmChains.base.bridges.epoch;
+  assert.ok(hasError(unrouted, "names chain 8453, which has no Epoch route"));
 });
 
 test("refuses a market that lends anything but the chain's Epoch USDC", () => {
@@ -932,7 +910,7 @@ test("refuses a market listed twice", () => {
   const repeated = mainnetCopy();
   repeated.earn.vaults[1].marketUid = repeated.earn.vaults[0].marketUid;
   assert.ok(
-    hasError(repeated, `earn.vaults names market AAVE_V3:42161:${ARBITRUM_USDC} twice`),
+    hasError(repeated, `earn.vaults names market AAVE_V3:8453:${BASE_USDC} twice`),
   );
 });
 
@@ -1001,7 +979,7 @@ test("refuses a depositsEnabled that is not boolean", () => {
 
 test("refuses a vault that is not an object", () => {
   const body = mainnetCopy();
-  body.earn.vaults[0] = "aave-v3-arbitrum-usdc";
+  body.earn.vaults[0] = "aave-v3-base-usdc";
   assert.ok(hasError(body, "earn.vaults[0] must be an object"));
 });
 
@@ -1013,15 +991,11 @@ test("plans one catalogue check per lent token, and none while Earn is off", () 
   assert.deepEqual(
     pools.map(({ url, marketUids }) => ({ url, marketUids })),
     [
-      [42161, ARBITRUM_USDC],
       [8453, BASE_USDC],
       [1, ETHEREUM_USDC],
     ].map(([chainId, underlying]) => ({
       url: `${POSITIONS}/pools?chainId=${chainId}&count=400&start=0&underlyings=${underlying}`,
-      marketUids: [
-        `AAVE_V3:${chainId}:${underlying}`,
-        `COMPOUND_V3_USDC:${chainId}:${underlying}`,
-      ],
+      marketUids: [`AAVE_V3:${chainId}:${underlying}`],
     })),
   );
   const off = mainnetCopy();
@@ -1058,7 +1032,7 @@ const poolsOnly = (config) => ({
   guardians: [],
   supportedEvmChains: {},
 });
-const allMainnetUids = MAINNET_EARN_VAULTS.map((vault) => vault.marketUid);
+const allMainnetUids = mainnet.earn.vaults.map((vault) => vault.marketUid);
 
 test("passes the catalogue check when Epoch serves every listed market, in any case", async () => {
   const config = poolsOnly(parseBridgeConfig(mainnetCopy(), "mainnet"));
@@ -1073,13 +1047,13 @@ test("passes the catalogue check when Epoch serves every listed market, in any c
       }),
     )
   ).filter((result) => result.label.startsWith("Earn markets"));
-  assert.equal(results.length, 3);
+  assert.equal(results.length, 2);
   assert.ok(results.every((result) => result.ok));
 });
 
 test("fails the catalogue check when Epoch does not serve a listed market", async () => {
   const config = poolsOnly(parseBridgeConfig(mainnetCopy(), "mainnet"));
-  const missing = `COMPOUND_V3_USDC:8453:${BASE_USDC}`;
+  const missing = `AAVE_V3:8453:${BASE_USDC}`;
   const results = (
     await smokeTest(
       config,
@@ -1161,14 +1135,7 @@ test("reads the published vault logos, and several vaults share one file", () =>
   const vaults = parseBridgeConfig(mainnetCopy(), "mainnet").earn.vaults;
   assert.deepEqual(
     vaults.map((vault) => vault.logo),
-    [
-      "icons/aave.svg",
-      "icons/compound.svg",
-      "icons/aave.svg",
-      "icons/compound.svg",
-      "icons/aave.svg",
-      "icons/compound.svg",
-    ],
+    ["icons/aave.svg", "icons/aave.svg"],
   );
   for (const file of ["aave", "compound", "morpho"]) {
     const logo = `icons/${file}.svg`;
@@ -1330,7 +1297,7 @@ test("--no-smoke reads each logo from the document's repository", async () => {
   try {
     writeFileSync(path.join(root, "mainnet.json"), JSON.stringify(mainnetCopy()));
     mkdirSync(path.join(root, "icons"));
-    writeFileSync(path.join(root, "icons/aave.svg"), PLAIN_SVG);
+    writeFileSync(path.join(root, "icons/compound.svg"), PLAIN_SVG);
     const result = await validateFile("mainnet.json", {
       root,
       smoke: false,
@@ -1340,9 +1307,9 @@ test("--no-smoke reads each logo from the document's repository", async () => {
     });
     assert.deepEqual(
       result.errors,
-      [1, 3, 5].map(
+      [0, 1].map(
         (index) =>
-          `earn.vaults[${index}].logo names icons/compound.svg, which is not a file in the repository`,
+          `earn.vaults[${index}].logo names icons/aave.svg, which is not a file in the repository`,
       ),
     );
   } finally {
@@ -1447,7 +1414,7 @@ test("only HTTP 502 service health and Earn pools responses are advisory", async
   const checks = plannedChecks(config).filter(
     (check) => check.kind === "http" || check.kind === "earn-pools",
   );
-  assert.equal(checks.length, 6);
+  assert.equal(checks.length, 5);
   assert.deepEqual(checks.filter((check) => check.kind === "http").map((check) => check.key).sort(),
     ["allocator", "indexer", "positions"]);
   for (const status of [502, 500, 503, 526]) {
@@ -1479,7 +1446,7 @@ test("transport and semantic errors cannot qualify by mentioning HTTP 502", asyn
     await t.test(name, async () => {
       const results = await smokeTest(config, serviceWorld(reply));
       const failed = results.filter((entry) => !entry.ok);
-      assert.equal(failed.length, 6);
+      assert.equal(failed.length, 5);
       assert.ok(failed.every((entry) => entry.advisory === false));
     });
   }
@@ -1508,7 +1475,7 @@ test("HTTP 502 warnings preserve exact diagnostics and annotations without faili
   const { code, lines } = await runMain(t, { "mainnet.json": body },
     serviceWorld(() => new Response("upstream unavailable", { status: 502 })));
   assert.equal(code, 0, lines.join("\n"));
-  assert.equal(checks.length, 6);
+  assert.equal(checks.length, 5);
   for (const check of checks) {
     const detail = `${check.label ?? check.key}: ${check.url} answered HTTP 502`;
     assert.ok(lines.includes(`  ⚠ warning: ${detail}`), detail);
@@ -1523,7 +1490,7 @@ test("HTTP 502 warnings cannot hide missing Earn markets in a successful respons
       ? Response.json({ success: true, data: { items: [] } })
       : new Response("upstream unavailable", { status: 502 })));
   assert.equal(code, 1, lines.join("\n"));
-  assert.equal(lines.filter((line) => line.startsWith("  ✗ Earn markets")).length, 3);
+  assert.equal(lines.filter((line) => line.startsWith("  ✗ Earn markets")).length, 2);
   assert.equal(lines.filter((line) => line.startsWith("  ⚠ warning:")).length, 3);
   assert.ok(lines.some((line) => line.includes("does not serve AAVE_V3:")));
 });
