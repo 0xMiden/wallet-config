@@ -748,7 +748,22 @@ test("on testnet, only warns when a new Guardian operator is down", async () => 
 const mainnet = JSON.parse(
   readFileSync(new URL("../mainnet.json", import.meta.url)),
 );
-const mainnetCopy = () => structuredClone(mainnet);
+/** The Earn vaults mainnet listed while Earn was on; the Earn tests exercise the validator with them. */
+const MAINNET_EARN_VAULTS = [
+  ["aave-v3-arbitrum-usdc", "AAVE_V3:42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831", "Aave V3 USDC", "icons/aave.svg"],
+  ["compound-v3-arbitrum-usdc", "COMPOUND_V3_USDC:42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831", "Compound III USDC", "icons/compound.svg"],
+  ["aave-v3-base-usdc", "AAVE_V3:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "Aave V3 USDC", "icons/aave.svg"],
+  ["compound-v3-base-usdc", "COMPOUND_V3_USDC:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "Compound III USDC", "icons/compound.svg"],
+  ["aave-v3-ethereum-usdc", "AAVE_V3:1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "Aave V3 USDC", "icons/aave.svg"],
+  ["compound-v3-ethereum-usdc", "COMPOUND_V3_USDC:1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "Compound III USDC", "icons/compound.svg"],
+].map(([id, marketUid, name, logo]) => ({ id, marketUid, name, protocol: "1delta", logo }));
+/** The published mainnet document with Earn turned on and the vaults listed. */
+const mainnetCopy = () => {
+  const body = structuredClone(mainnet);
+  body.features.earn = true;
+  body.earn = { vaults: structuredClone(MAINNET_EARN_VAULTS) };
+  return body;
+};
 const mainnetErrors = (body) =>
   parseBridgeConfigDetailed(body, "mainnet").errors;
 const BASE_USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
@@ -1043,7 +1058,7 @@ const poolsOnly = (config) => ({
   guardians: [],
   supportedEvmChains: {},
 });
-const allMainnetUids = mainnet.earn.vaults.map((vault) => vault.marketUid);
+const allMainnetUids = MAINNET_EARN_VAULTS.map((vault) => vault.marketUid);
 
 test("passes the catalogue check when Epoch serves every listed market, in any case", async () => {
   const config = poolsOnly(parseBridgeConfig(mainnetCopy(), "mainnet"));
