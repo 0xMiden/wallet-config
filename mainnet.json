@@ -61,13 +61,6 @@
   "earn": {
     "vaults": [
       {
-        "id": "aave-v3-arbitrum-usdc",
-        "marketUid": "AAVE_V3:42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831",
-        "name": "Aave V3 USDC",
-        "protocol": "1delta",
-        "logo": "icons/aave.svg"
-      },
-      {
         "id": "aave-v3-base-usdc",
         "marketUid": "AAVE_V3:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
         "name": "Aave V3 USDC",
