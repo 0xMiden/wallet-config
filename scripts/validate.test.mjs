@@ -457,8 +457,15 @@ test("the encrypted backup section exists exactly while its switch is on", async
     return body;
   };
 
-  await t.test("the published documents keep the switch off and name no service", () => {
-    for (const network of ["testnet", "devnet", "mainnet"]) {
+  await t.test("the published mainnet document names the live service; testnet and devnet stay off", () => {
+    const mainnet = JSON.parse(
+      readFileSync(new URL("../mainnet.json", import.meta.url)),
+    );
+    assert.equal(mainnet.features.encryptedBackup, true);
+    assert.deepEqual(mainnet.backup, {
+      baseUrl: "https://miden-wallet-api.utkarsh-s.workers.dev",
+    });
+    for (const network of ["testnet", "devnet"]) {
       const body = JSON.parse(
         readFileSync(new URL(`../${network}.json`, import.meta.url)),
       );

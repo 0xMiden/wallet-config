@@ -52,7 +52,10 @@
     "bridgeOut": true,
     "nearIntents": false,
     "arcadeGcPurchase": true,
-    "encryptedBackup": false
+    "encryptedBackup": true
+  },
+  "backup": {
+    "baseUrl": "https://miden-wallet-api.utkarsh-s.workers.dev"
   },
   "arcade": {
     "sale": {

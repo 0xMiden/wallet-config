@@ -196,8 +196,10 @@ refused, so a stale URL cannot stay in the document.
 credentials, no query, no fragment and no trailing slash, because the wallet
 appends its routes to it. The host is lower-cased and a default port is dropped.
 
-All three published documents keep `features.encryptedBackup` false and have no
-`backup` section until the Worker is deployed.
+The backup is a mainnet feature. `mainnet.json` turns the switch on and names
+the live Worker, `https://miden-wallet-api.utkarsh-s.workers.dev`. `testnet.json`
+and `devnet.json` keep `features.encryptedBackup` false and have no `backup`
+section.
 
 ## Guardian operators
 
