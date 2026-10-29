@@ -1,12 +1,13 @@
 {
   "network": "devnet",
-  "version": 5,
+  "version": 6,
   "features": {
     "earn": false,
     "fastBridge": false,
     "bridgeIn": false,
     "bridgeOut": false,
-    "openFullscreen": true
+    "openFullscreen": true,
+    "encryptedBackup": false
   },
   "geo": {
     "wallet": {
