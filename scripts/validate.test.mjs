@@ -150,6 +150,79 @@ test("mainnet Epoch does not need a testnet faucet or market", () => {
   delete body.supportedEvmChains.sepolia.bridges.epoch.tokens.USDC.outputs;
   assert.deepEqual(errors(body), []);
 });
+test("an Epoch route lists several tokens, each probed and each naming its token-list symbol", () => {
+  const body = copy();
+  const epoch = body.supportedEvmChains.sepolia.bridges.epoch;
+  epoch.tokens.WETH = {
+    contractAddress: "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9",
+    midenSymbol: "ETH",
+  };
+  assert.deepEqual(errors(body), []);
+  const listed = Object.values(epoch.tokens).map((token) =>
+    token.contractAddress.toLowerCase(),
+  );
+  const planned = plannedChecks(body).filter(
+    (check) =>
+      check.address !== undefined &&
+      listed.includes(check.address.toLowerCase()),
+  );
+  for (const kind of ["evm-code", "evm-uint"])
+    assert.equal(
+      planned.filter((check) => check.kind === kind).length,
+      listed.length,
+    );
+});
+test("an Epoch route needs no USDC unless an Earn vault lends it", () => {
+  const body = copy();
+  const epoch = body.supportedEvmChains.sepolia.bridges.epoch;
+  epoch.tokens.WETH = {
+    contractAddress: "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9",
+  };
+  delete epoch.tokens.USDC;
+  assert.ok(
+    errors(body).some((error) => error.includes("not the Epoch USDC of chain 11155111")),
+  );
+  delete body.earn;
+  body.features.earn = false;
+  assert.deepEqual(errors(body), []);
+});
+test("bad Epoch tokens reject the document", async (t) => {
+  const cases = [
+    ["no token", (epoch) => (epoch.tokens = {}), "must list at least one token"],
+    [
+      "a symbol that is not one",
+      (epoch) =>
+        (epoch.tokens["usdc.e"] = {
+          contractAddress: "0x0000000000000000000000000000000000000001",
+        }),
+      "is not a token symbol",
+    ],
+    [
+      "one address twice",
+      (epoch) =>
+        (epoch.tokens.USDT = {
+          contractAddress: epoch.tokens.USDC.contractAddress,
+        }),
+      "twice",
+    ],
+    [
+      "a token with no address",
+      (epoch) => (epoch.tokens.WETH = {}),
+      "tokens.WETH.contractAddress is missing or invalid",
+    ],
+    [
+      "a Miden symbol that is not one",
+      (epoch) => (epoch.tokens.USDC.midenSymbol = "usdcx"),
+      "tokens.USDC.midenSymbol is not a token symbol",
+    ],
+  ];
+  for (const [name, change, message] of cases)
+    await t.test(name, () => {
+      const body = copy();
+      change(body.supportedEvmChains.sepolia.bridges.epoch);
+      assert.ok(errors(body).some((error) => error.includes(message)));
+    });
+});
 test("geo rules name a feature and a place", () => {
   const body = copy();
   body.geo = {
@@ -760,17 +833,26 @@ const BASE_USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 const ARBITRUM_USDC = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
 const ETHEREUM_USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const POSITIONS = "https://positions-mainnet.epochprotocol.xyz";
-test("mainnet pauses every listed Earn vault without removing positions or withdrawal routes", () => {
+test("mainnet takes Earn deposits and Fast transfers of USDC on every live Epoch route", () => {
   const config = parseBridgeConfig(mainnet, "mainnet");
   assert.equal(config.features.earn, true);
+  assert.equal(config.features.fastBridge, true);
   assert.deepEqual(config.earn.vaults.map(({ id, depositsEnabled }) => ({ id, depositsEnabled })), [
-    { id: "aave-v3-base-usdc", depositsEnabled: false },
-    { id: "aave-v3-ethereum-usdc", depositsEnabled: false },
+    { id: "aave-v3-base-usdc", depositsEnabled: true },
+    { id: "aave-v3-ethereum-usdc", depositsEnabled: true },
   ]);
   assert.equal(config["bridge-providers"].epoch.positionsUrl, POSITIONS);
   assert.equal(config["bridge-providers"].epoch.allocatorUrl, "https://mainnet-api.epochprotocol.xyz");
-  for (const chain of ["ethereum", "base", "arbitrum"])
-    assert.equal(config.supportedEvmChains[chain].bridges.epoch.withdrawalEnabled, true);
+  for (const chain of ["ethereum", "base", "arbitrum", "polygon"]) {
+    const route = config.supportedEvmChains[chain].bridges.epoch;
+    assert.equal(route.depositEnabled, true);
+    assert.equal(route.withdrawalEnabled, true);
+    assert.equal(mainnet.supportedEvmChains[chain].bridges.epoch.tokens.USDC.midenSymbol, "USDCX");
+  }
+  // Robinhood is staged: Epoch quotes none of its tokens yet.
+  const robinhood = config.supportedEvmChains.robinhood.bridges.epoch;
+  assert.equal(robinhood.depositEnabled, false);
+  assert.equal(robinhood.withdrawalEnabled, false);
 });
 /** The mainnet document with one vault changed by `change`. */
 const withVault = (change) => {

@@ -20,6 +20,8 @@ export const CHAIN_IDS = {
   arbitrum: 42161,
   optimism: 10,
   arc: 5042,
+  polygon: 137,
+  robinhood: 4663,
 };
 export const SUPPORTED_EVM_CHAIN_IDS = Object.values(CHAIN_IDS);
 /** The marks the wallet ships for a swap token's logo (components/TokenLogo). */
@@ -59,8 +61,8 @@ const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 // A token symbol as the protocol's TokenSymbol allows it: 1 to 6 upper-case ASCII letters.
 const TOKEN_SYMBOL = /^[A-Z]{1,6}$/;
-// An ERC-20 symbol as the wallet shows it in the deposit token picker: 1 to 11 upper-case ASCII letters or digits.
-const AGGLAYER_TOKEN_SYMBOL = /^[A-Z0-9]{1,11}$/;
+// An ERC-20 symbol as an AggLayer or Epoch route keys it: 1 to 11 upper-case ASCII letters or digits.
+const BRIDGE_TOKEN_SYMBOL = /^[A-Z0-9]{1,11}$/;
 // A Guardian operator id: lower-case letters and digits in groups joined by single hyphens.
 const GUARDIAN_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // A Guardian's key commitment as `GET /pubkey` serves it: a 32-byte 0x word.
@@ -98,6 +100,8 @@ export const EVM_RPCS = {
   8453: ["https://mainnet.base.org"],
   42161: ["https://arb1.arbitrum.io/rpc"],
   10: ["https://mainnet.optimism.io"],
+  137: ["https://polygon-bor-rpc.publicnode.com", "https://polygon-rpc.com"],
+  4663: ["https://rpc.mainnet.chain.robinhood.com"],
   5042: ["https://rpc.mainnet.arc.io", "https://arc.drpc.org"],
   11155111: [
     "https://ethereum-sepolia-rpc.publicnode.com",
@@ -357,15 +361,34 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
         if (typeof bridge[direction] !== "boolean")
           errors.push(`${label}.${direction} must be boolean`);
       switch (kind) {
-        case "epoch":
-        case "usdcx": {
-          const token = bridge.tokens?.USDC;
-          if (!isRecord(token)) {
-            errors.push(`${label}.tokens.USDC is required`);
+        case "epoch": {
+          // The EVM tokens the route carries, keyed by symbol. The wallet takes the Miden faucet the
+          // solver settles a token into from the token-list's entry for its `midenSymbol` (its key
+          // when absent); testnet's USDC names its output instead.
+          if (!isRecord(bridge.tokens) || Object.keys(bridge.tokens).length === 0) {
+            errors.push(`${label}.tokens must list at least one token`);
             break;
           }
-          required(token, "contractAddress", label, EVM_ADDRESS);
-          if (kind === "epoch") {
+          const addresses = new Set();
+          for (const [symbol, token] of Object.entries(bridge.tokens)) {
+            const tokenLabel = `${label}.tokens.${symbol}`;
+            if (!BRIDGE_TOKEN_SYMBOL.test(symbol))
+              errors.push(`${tokenLabel} is not a token symbol`);
+            if (!isRecord(token)) {
+              errors.push(`${tokenLabel} must be an object`);
+              continue;
+            }
+            required(token, "contractAddress", tokenLabel, EVM_ADDRESS);
+            const address = String(token.contractAddress).toLowerCase();
+            if (addresses.has(address))
+              errors.push(`${label}.tokens names ${address} twice`);
+            addresses.add(address);
+            if (
+              token.midenSymbol !== undefined &&
+              (typeof token.midenSymbol !== "string" ||
+                !BRIDGE_TOKEN_SYMBOL.test(token.midenSymbol))
+            )
+              errors.push(`${tokenLabel}.midenSymbol is not a token symbol`);
             if (
               token.outputs !== undefined &&
               (!Array.isArray(token.outputs) ||
@@ -376,9 +399,17 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
                     !isRecord(providers.epoch?.outputs?.[key]),
                 ))
             )
-              errors.push(`${label} has an invalid output reference`);
+              errors.push(`${tokenLabel} has an invalid output reference`);
+          }
+          break;
+        }
+        case "usdcx": {
+          const token = bridge.tokens?.USDC;
+          if (!isRecord(token)) {
+            errors.push(`${label}.tokens.USDC is required`);
             break;
           }
+          required(token, "contractAddress", label, EVM_ADDRESS);
           if (
             !Number.isInteger(bridge.domain) ||
             bridge.domain < 0 ||
@@ -438,7 +469,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
             const addresses = new Set();
             for (const [symbol, token] of Object.entries(bridge.tokens)) {
               const tokenLabel = `${label}.tokens.${symbol}`;
-              if (!AGGLAYER_TOKEN_SYMBOL.test(symbol))
+              if (!BRIDGE_TOKEN_SYMBOL.test(symbol))
                 errors.push(`${tokenLabel} is not a token symbol`);
               if (!isRecord(token)) {
                 errors.push(`${tokenLabel} must be an object`);
@@ -1058,19 +1089,21 @@ export function plannedChecks(config, { publishedGuardians = [] } = {}) {
             `${providers.epoch.allocatorUrl}/health`,
             (body) => body?.status === "healthy",
           );
-          code(
-            chain.chainId,
-            bridge.tokens.USDC.contractAddress,
-            `${name} Epoch USDC`,
-          );
-          add({
-            key: `decimals:${chain.chainId}:${bridge.tokens.USDC.contractAddress}`,
-            kind: "evm-uint",
-            chainId: chain.chainId,
-            address: bridge.tokens.USDC.contractAddress,
-            data: "0x313ce567",
-            label: `${name} Epoch USDC decimals()`,
-          });
+          for (const [symbol, token] of Object.entries(bridge.tokens)) {
+            code(
+              chain.chainId,
+              token.contractAddress,
+              `${name} Epoch ${symbol}`,
+            );
+            add({
+              key: `decimals:${chain.chainId}:${token.contractAddress}`,
+              kind: "evm-uint",
+              chainId: chain.chainId,
+              address: token.contractAddress,
+              data: "0x313ce567",
+              label: `${name} Epoch ${symbol} decimals()`,
+            });
+          }
           break;
         case "agglayer":
           service(
