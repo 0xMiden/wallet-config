@@ -53,7 +53,10 @@
     "nearIntents": false,
     "arcadeGcPurchase": true,
     "openFullscreen": false,
-    "encryptedBackup": false
+    "encryptedBackup": true
+  },
+  "backup": {
+    "baseUrl": "https://miden-wallet-api.utkarsh-s.workers.dev"
   },
   "arcade": {
     "sale": {
