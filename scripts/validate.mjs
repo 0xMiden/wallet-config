@@ -271,6 +271,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     "bridgeOut",
     "nearIntents",
     "arcadeGcPurchase",
+    "encryptedBackup",
   ];
   for (const name of featureNames) {
     if (featuresIn[name] !== undefined && typeof featuresIn[name] !== "boolean")
@@ -487,6 +488,11 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     featuresIn.arcadeGcPurchase === true,
     errors,
   );
+  const backup = readBackup(
+    body.backup,
+    featuresIn.encryptedBackup === true,
+    errors,
+  );
   const onboarding = readSection(body, "onboarding", errors);
   if (
     onboarding.inviteOnly !== undefined &&
@@ -512,6 +518,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
             earn: featuresIn.earn === true,
             nearIntents: featuresIn.nearIntents === true,
             arcadeGcPurchase: featuresIn.arcadeGcPurchase === true,
+            encryptedBackup: featuresIn.encryptedBackup === true,
           },
           "bridge-providers": providers,
           supportedEvmChains: chains,
@@ -522,6 +529,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           ...(guardians === undefined ? {} : { guardians }),
           ...(earn === undefined ? {} : { earn }),
           ...(arcade === undefined ? {} : { arcade }),
+          ...(backup === undefined ? {} : { backup }),
         },
     errors,
     dropped,
@@ -782,6 +790,42 @@ function readArcade(value, purchaseOn, errors) {
   if (seller === undefined && value.sale.seller === undefined)
     errors.push("arcade.sale.seller is required");
   return seller === undefined ? undefined : { sale: { seller } };
+}
+
+/**
+ * The wallet's encrypted backup service (schema.ts readBackup): the base URL of the multi-device
+ * backup API, a Cloudflare Worker that stores ciphertext only, since the wallet encrypts every entry
+ * on the device. The section exists exactly while `features.encryptedBackup` is on, so a stale URL
+ * cannot linger behind a switched-off feature. The wallet appends its routes to `baseUrl`, so the
+ * URL must be `https:` with a host and carry no credentials, query, fragment or trailing slash.
+ */
+function readBackup(value, backupOn, errors) {
+  if (value === undefined) {
+    if (backupOn)
+      errors.push("backup.baseUrl is required while features.encryptedBackup is on");
+    return undefined;
+  }
+  if (!backupOn)
+    errors.push("backup must be omitted while features.encryptedBackup is off");
+  if (!isRecord(value)) {
+    errors.push("backup must be an object");
+    return undefined;
+  }
+  if (value.baseUrl === undefined) {
+    errors.push("backup.baseUrl is required");
+    return undefined;
+  }
+  // `new URL` drops an empty query or fragment (`https://host?`), so the text itself is checked too.
+  if (typeof value.baseUrl === "string" && /[?#]/.test(value.baseUrl)) {
+    errors.push("backup.baseUrl must not carry credentials, a query or a fragment");
+    return undefined;
+  }
+  if (typeof value.baseUrl === "string" && value.baseUrl.endsWith("/")) {
+    errors.push("backup.baseUrl must not end with a slash");
+    return undefined;
+  }
+  const baseUrl = readUrl(value, "backup", "baseUrl", false, errors);
+  return baseUrl === undefined ? undefined : { baseUrl };
 }
 
 /**

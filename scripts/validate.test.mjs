@@ -396,7 +396,13 @@ test("smoke checks report contract and service failures", async (t) => {
 });
 
 test("preserves the published feature keys and validates their boolean values", () => {
-  assert.deepEqual(source.features, { earn: true, fastBridge: true, bridgeIn: true, bridgeOut: true });
+  assert.deepEqual(source.features, {
+    earn: true,
+    fastBridge: true,
+    bridgeIn: true,
+    bridgeOut: true,
+    encryptedBackup: false,
+  });
   for (const name of Object.keys(source.features)) {
     const body = copy();
     body.features[name] = false;
@@ -440,6 +446,107 @@ test("the Arcade GC sale exists exactly while its switch is on and names the sel
   assert.deepEqual(errors(on), []);
   on.features.arcadeGcPurchase = "true";
   assert.ok(errors(on).some((error) => error.includes("features.arcadeGcPurchase")));
+});
+
+test("the encrypted backup section exists exactly while its switch is on", async (t) => {
+  const BACKUP = "https://backup.miden.example";
+  const withBackup = (backup) => {
+    const body = copy();
+    body.features.encryptedBackup = true;
+    if (backup !== undefined) body.backup = backup;
+    return body;
+  };
+
+  await t.test("the published mainnet document names the live service; testnet and devnet stay off", () => {
+    const mainnet = JSON.parse(
+      readFileSync(new URL("../mainnet.json", import.meta.url)),
+    );
+    assert.equal(mainnet.features.encryptedBackup, true);
+    assert.deepEqual(mainnet.backup, {
+      baseUrl: "https://miden-wallet-api.utkarsh-s.workers.dev",
+    });
+    for (const network of ["testnet", "devnet"]) {
+      const body = JSON.parse(
+        readFileSync(new URL(`../${network}.json`, import.meta.url)),
+      );
+      assert.equal(body.features.encryptedBackup, false, network);
+      assert.equal(body.backup, undefined, network);
+    }
+  });
+
+  await t.test("on with a valid section passes", () => {
+    const parsed = parseBridgeConfigDetailed(withBackup({ baseUrl: BACKUP }), "testnet");
+    assert.deepEqual(parsed.errors, []);
+    assert.equal(parsed.config.features.encryptedBackup, true);
+    assert.deepEqual(parsed.config.backup, { baseUrl: BACKUP });
+    const withPath = parseBridgeConfigDetailed(
+      withBackup({ baseUrl: `${BACKUP}/v1` }),
+      "testnet",
+    );
+    assert.deepEqual(withPath.errors, []);
+    assert.deepEqual(withPath.config.backup, { baseUrl: `${BACKUP}/v1` });
+  });
+
+  await t.test("on with the section missing fails", () => {
+    assert.ok(
+      errors(withBackup()).some((error) =>
+        error.includes("backup.baseUrl is required while features.encryptedBackup is on"),
+      ),
+    );
+    assert.ok(
+      errors(withBackup({})).some((error) => error.includes("backup.baseUrl is required")),
+    );
+    assert.ok(errors(withBackup("x")).some((error) => error.includes("backup must be an object")));
+  });
+
+  await t.test("off with the section present fails", () => {
+    const off = copy();
+    off.backup = { baseUrl: BACKUP };
+    assert.ok(errors(off).some((error) => error.includes("backup must be omitted")));
+    const absent = copy();
+    delete absent.features.encryptedBackup;
+    absent.backup = { baseUrl: BACKUP };
+    assert.ok(errors(absent).some((error) => error.includes("backup must be omitted")));
+  });
+
+  await t.test("an absent switch means off", () => {
+    const body = copy();
+    delete body.features.encryptedBackup;
+    const parsed = parseBridgeConfigDetailed(body, "testnet");
+    assert.deepEqual(parsed.errors, []);
+    assert.equal(parsed.config.features.encryptedBackup, false);
+    assert.equal(parsed.config.backup, undefined);
+  });
+
+  await t.test("the switch accepts only a boolean", () => {
+    const body = withBackup({ baseUrl: BACKUP });
+    body.features.encryptedBackup = "true";
+    assert.ok(
+      errors(body).some((error) => error.includes("features.encryptedBackup must be boolean")),
+    );
+  });
+
+  await t.test("a bad base URL fails", () => {
+    for (const [baseUrl, reason] of [
+      ["http://backup.miden.example", "must use https:"],
+      ["http://127.0.0.1:8787", "must use https:"],
+      [`${BACKUP}/`, "must not end with a slash"],
+      [`${BACKUP}/v1/`, "must not end with a slash"],
+      [`${BACKUP}?token=1`, "a query or a fragment"],
+      [`${BACKUP}?`, "a query or a fragment"],
+      [`${BACKUP}#entries`, "a query or a fragment"],
+      ["https://user:secret@backup.miden.example", "credentials"],
+      ["backup.miden.example", "is not a URL"],
+      [42, "must be a URL string"],
+    ]) {
+      assert.ok(
+        errors(withBackup({ baseUrl })).some(
+          (error) => error.startsWith("backup.baseUrl") && error.includes(reason),
+        ),
+        String(baseUrl),
+      );
+    }
+  });
 });
 
 test("nearIntents defaults off and accepts only explicit booleans", () => {

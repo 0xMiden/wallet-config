@@ -19,10 +19,13 @@ the solver's `/v2/pairs` endpoint.
 ## Bridge configuration
 
 `features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`,
-`nearIntents` and `arcadeGcPurchase`. Each value must be a boolean; an omitted
-`nearIntents` or `arcadeGcPurchase` defaults to `false`. `arcadeGcPurchase`
+`nearIntents`, `arcadeGcPurchase` and `encryptedBackup`. Each value must be a
+boolean; an omitted `nearIntents`, `arcadeGcPurchase` or `encryptedBackup`
+defaults to `false`. `arcadeGcPurchase`
 turns on buying Game Coins in Arcade and requires the `arcade` section (see
-[Arcade GC sale](#arcade-gc-sale)). `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
+[Arcade GC sale](#arcade-gc-sale)). `encryptedBackup` turns on the encrypted
+multi-device backup and requires the `backup` section (see
+[Encrypted backup](#encrypted-backup)). `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
 until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
 configuration have been verified. Do not enable it with placeholder production
 URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
@@ -170,6 +173,33 @@ decision the document makes for the Arcade purchase: the wallet finds the live
 sale note on chain by the tag the PSWAP script derives from the GC and USDCx
 faucets, prices a purchase from the note's own terms, and accepts only a note
 whose creator is this seller. Nothing else about the sale is configured here.
+
+## Encrypted backup
+
+`backup.baseUrl` is the base URL of the wallet's encrypted multi-device backup
+API, a Cloudflare Worker. The wallet encrypts every backup entry on the device
+before it sends it, so the server stores ciphertext only and cannot read the
+entries. Another device of the same user reads the entries back through the
+same API and decrypts them on that device.
+
+```json
+"backup": {
+  "baseUrl": "https://backup.example.com"
+}
+```
+
+The section exists exactly while `features.encryptedBackup` is true: the switch
+on requires it, and a `backup` section while the switch is off or absent is
+refused, so a stale URL cannot stay in the document.
+
+`baseUrl` is an absolute `https:` URL with a host. It can have a path, but no
+credentials, no query, no fragment and no trailing slash, because the wallet
+appends its routes to it. The host is lower-cased and a default port is dropped.
+
+The backup is a mainnet feature. `mainnet.json` turns the switch on and names
+the live Worker, `https://miden-wallet-api.utkarsh-s.workers.dev`. `testnet.json`
+and `devnet.json` keep `features.encryptedBackup` false and have no `backup`
+section.
 
 ## Guardian operators
 

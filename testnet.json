@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "version": 16,
+  "version": 17,
   "evm": {
     "chainId": 11155111
   },
@@ -65,7 +65,8 @@
     "earn": true,
     "fastBridge": true,
     "bridgeIn": true,
-    "bridgeOut": true
+    "bridgeOut": true,
+    "encryptedBackup": false
   },
   "earn": {
     "vaults": [
