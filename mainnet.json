@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 16,
+  "version": 17,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
@@ -47,7 +47,7 @@
   ],
   "features": {
     "earn": true,
-    "fastBridge": false,
+    "fastBridge": true,
     "bridgeIn": true,
     "bridgeOut": true,
     "nearIntents": false,
@@ -65,7 +65,6 @@
         "marketUid": "AAVE_V3:8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
         "name": "Aave V3 USDC",
         "protocol": "1delta",
-        "depositsEnabled": false,
         "logo": "icons/aave.svg"
       },
       {
@@ -73,7 +72,6 @@
         "marketUid": "AAVE_V3:1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         "name": "Aave V3 USDC",
         "protocol": "1delta",
-        "depositsEnabled": false,
         "logo": "icons/aave.svg"
       }
     ]
@@ -143,7 +141,11 @@
           "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
-              "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+              "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+              "midenSymbol": "USDCX"
+            },
+            "ETH": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
             }
           }
         },
@@ -208,7 +210,11 @@
           "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
-              "contractAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+              "contractAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "midenSymbol": "USDCX"
+            },
+            "ETH": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
             }
           }
         },
@@ -238,7 +244,11 @@
           "withdrawalEnabled": true,
           "tokens": {
             "USDC": {
-              "contractAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+              "contractAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "midenSymbol": "USDCX"
+            },
+            "ETH": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
             }
           }
         },
@@ -255,6 +265,41 @@
           "tokens": {
             "USDC": {
               "contractAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+            }
+          }
+        }
+      }
+    },
+    "polygon": {
+      "chainId": 137,
+      "bridges": {
+        "epoch": {
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "USDC": {
+              "contractAddress": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+              "midenSymbol": "USDCX"
+            },
+            "POL": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
+            }
+          }
+        }
+      }
+    },
+    "robinhood": {
+      "chainId": 4663,
+      "bridges": {
+        "epoch": {
+          "depositEnabled": true,
+          "withdrawalEnabled": true,
+          "tokens": {
+            "ETH": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
+            },
+            "USDG": {
+              "contractAddress": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"
             }
           }
         }
