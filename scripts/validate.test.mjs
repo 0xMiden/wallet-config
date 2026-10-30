@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  EPOCH_NATIVE_TOKEN,
   EVM_RPCS,
   MAX_EARN_VAULT_LOGO_BYTES,
   earnLogoErrors,
@@ -171,6 +172,14 @@ test("an Epoch route lists several tokens, each probed and each naming its token
       planned.filter((check) => check.kind === kind).length,
       listed.length,
     );
+});
+test("an Epoch route lists the native coin at the zero address, with no contract read", () => {
+  const body = copy();
+  const epoch = body.supportedEvmChains.sepolia.bridges.epoch;
+  epoch.tokens.ETH = { contractAddress: EPOCH_NATIVE_TOKEN };
+  assert.deepEqual(errors(body), []);
+  const planned = plannedChecks(body).filter((check) => check.address === EPOCH_NATIVE_TOKEN);
+  assert.deepEqual(planned, []);
 });
 test("an Epoch route needs no USDC unless an Earn vault lends it", () => {
   const body = copy();
@@ -849,7 +858,10 @@ test("mainnet takes Earn deposits and Fast transfers of USDC on every live Epoch
     assert.equal(route.withdrawalEnabled, true);
     assert.equal(mainnet.supportedEvmChains[chain].bridges.epoch.tokens.USDC.midenSymbol, "USDCX");
   }
-  // Robinhood is staged: Epoch quotes none of its tokens yet.
+  // Epoch quotes the native coin, not its wrapped token: ETH on Base and Arbitrum, POL on Polygon.
+  for (const [chain, symbol] of [["base", "ETH"], ["arbitrum", "ETH"], ["polygon", "POL"], ["robinhood", "ETH"]])
+    assert.equal(mainnet.supportedEvmChains[chain].bridges.epoch.tokens[symbol].contractAddress, EPOCH_NATIVE_TOKEN);
+  // Robinhood is staged with both switches off.
   const robinhood = config.supportedEvmChains.robinhood.bridges.epoch;
   assert.equal(robinhood.depositEnabled, false);
   assert.equal(robinhood.withdrawalEnabled, false);

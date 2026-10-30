@@ -9,9 +9,10 @@ Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
 Mainnet takes Earn deposits into both Aave V3 USDC vaults, on Base and Ethereum.
 Epoch fast bridge transfers (`fastBridge`) carry USDC to and from USDCx on Ethereum,
-Base, Arbitrum and Polygon. The Arbitrum and Polygon Epoch routes list no Earn vault.
-The Robinhood Chain route lists USDC, WETH and USDG with both switches off: Epoch
-quotes none of them yet. NEAR intents stay off. Mainnet Swap uses
+Base, Arbitrum and Polygon, native ETH to and from Miden ETH on Base and Arbitrum,
+and native POL to and from Miden POL on Polygon. The Arbitrum and Polygon Epoch
+routes list no Earn vault. The Robinhood Chain route lists USDC, native ETH and
+USDG with both switches off. NEAR intents stay off. Mainnet Swap uses
 `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 
@@ -103,10 +104,14 @@ symbol the wallet shows (upper-case letters and digits, at most 11). No address
 appears twice. The wallet takes the Miden faucet the solver settles a token into
 from the [token list](https://github.com/0xMiden/token-list): the entry whose
 symbol is the token's `midenSymbol`, or its key when `midenSymbol` is absent. Name
-`midenSymbol` when the two symbols differ, as USDC settles into `USDCX` and WETH
-into `ETH`. A token's `outputs` names provider outputs instead, which only the
-testnet USDC uses. An Earn market must lend a route's `USDC`. The validator reads
-each listed token's contract on its chain while the route is on, so stage a route
+`midenSymbol` when the two symbols differ, as USDC settles into `USDCX`. A token's
+`outputs` names provider outputs instead, which only the testnet USDC uses. List
+the chain's native coin at the zero address
+(`0x0000000000000000000000000000000000000000`), which is the address Epoch quotes
+it at. Epoch quotes no route for the wrapped token (WETH, WPOL) or for the
+`0xEeee…EEeE` placeholder. An Earn market must lend a route's `USDC`. The
+validator reads each listed ERC-20 contract on its chain while the route is on
+(the native coin has no contract to read), so stage a route
 with both switches off until Epoch quotes its tokens: the switches belong to the
 route, and every listed token of a route that is on is offered.
 

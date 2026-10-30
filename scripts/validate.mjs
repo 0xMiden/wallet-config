@@ -57,6 +57,8 @@ export const MAX_EARN_VAULT_LOGO_BYTES = 64 * 1024;
 export const WARN_ONLY_LIVE_CHECK_NETWORKS = ["testnet"];
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+// The address an Epoch route names the chain's native coin with, as the Epoch allocator quotes it.
+export const EPOCH_NATIVE_TOKEN = "0x0000000000000000000000000000000000000000";
 const MIDEN_ACCOUNT_ID = /^0x[0-9a-fA-F]{30}$/;
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 // A token symbol as the protocol's TokenSymbol allows it: 1 to 6 upper-case ASCII letters.
@@ -1090,6 +1092,8 @@ export function plannedChecks(config, { publishedGuardians = [] } = {}) {
             (body) => body?.status === "healthy",
           );
           for (const [symbol, token] of Object.entries(bridge.tokens)) {
+            // The native coin has no contract to read: the chain check covers it.
+            if (token.contractAddress === EPOCH_NATIVE_TOKEN) continue;
             code(
               chain.chainId,
               token.contractAddress,

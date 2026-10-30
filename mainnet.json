@@ -209,6 +209,9 @@
             "USDC": {
               "contractAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
               "midenSymbol": "USDCX"
+            },
+            "ETH": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
             }
           }
         },
@@ -240,6 +243,9 @@
             "USDC": {
               "contractAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
               "midenSymbol": "USDCX"
+            },
+            "ETH": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
             }
           }
         },
@@ -272,9 +278,8 @@
               "contractAddress": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
               "midenSymbol": "USDCX"
             },
-            "WPOL": {
-              "contractAddress": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
-              "midenSymbol": "POL"
+            "POL": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
             }
           }
         }
@@ -291,9 +296,8 @@
               "contractAddress": "0x80e0e24718dbFcad49ECAA6F1e6C89A190586cA8",
               "midenSymbol": "USDCX"
             },
-            "WETH": {
-              "contractAddress": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
-              "midenSymbol": "ETH"
+            "ETH": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
             },
             "USDG": {
               "contractAddress": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"
