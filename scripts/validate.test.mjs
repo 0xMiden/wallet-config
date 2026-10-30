@@ -859,11 +859,17 @@ test("mainnet takes Earn deposits and Fast transfers of USDC on every live Epoch
     assert.equal(mainnet.supportedEvmChains[chain].bridges.epoch.tokens.USDC.midenSymbol, "USDCX");
   }
   // Epoch quotes the native coin, not its wrapped token: ETH on Base and Arbitrum, POL on Polygon.
-  for (const [chain, symbol] of [["base", "ETH"], ["arbitrum", "ETH"], ["polygon", "POL"], ["robinhood", "ETH"]])
+  for (const [chain, symbol] of [
+    ["ethereum", "ETH"],
+    ["base", "ETH"],
+    ["arbitrum", "ETH"],
+    ["polygon", "POL"],
+    ["robinhood", "ETH"],
+  ])
     assert.equal(mainnet.supportedEvmChains[chain].bridges.epoch.tokens[symbol].contractAddress, EPOCH_NATIVE_TOKEN);
-  // Robinhood is staged with both switches off.
+  // Robinhood takes deposits; its withdrawals stay off.
   const robinhood = config.supportedEvmChains.robinhood.bridges.epoch;
-  assert.equal(robinhood.depositEnabled, false);
+  assert.equal(robinhood.depositEnabled, true);
   assert.equal(robinhood.withdrawalEnabled, false);
 });
 /** The mainnet document with one vault changed by `change`. */

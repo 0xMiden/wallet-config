@@ -143,6 +143,9 @@
             "USDC": {
               "contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
               "midenSymbol": "USDCX"
+            },
+            "ETH": {
+              "contractAddress": "0x0000000000000000000000000000000000000000"
             }
           }
         },
@@ -289,13 +292,9 @@
       "chainId": 4663,
       "bridges": {
         "epoch": {
-          "depositEnabled": false,
+          "depositEnabled": true,
           "withdrawalEnabled": false,
           "tokens": {
-            "USDC": {
-              "contractAddress": "0x80e0e24718dbFcad49ECAA6F1e6C89A190586cA8",
-              "midenSymbol": "USDCX"
-            },
             "ETH": {
               "contractAddress": "0x0000000000000000000000000000000000000000"
             },
