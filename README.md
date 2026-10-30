@@ -11,9 +11,8 @@ Mainnet takes Earn deposits into both Aave V3 USDC vaults, on Base and Ethereum.
 Epoch fast bridge transfers (`fastBridge`) carry USDC to and from USDCx on Ethereum,
 Base, Arbitrum and Polygon, native ETH to and from Miden ETH on Ethereum, Base and
 Arbitrum, and native POL to and from Miden POL on Polygon. The Arbitrum and Polygon
-Epoch routes list no Earn vault. The Robinhood Chain route lists native ETH and USDG
-and takes deposits only; its withdrawals stay off. Its USDC is not listed until Epoch
-quotes it. NEAR intents stay off. Mainnet Swap uses
+Epoch routes list no Earn vault. The Robinhood Chain route lists native ETH and USDG,
+both ways; its USDC is not listed until Epoch quotes it. NEAR intents stay off. Mainnet Swap uses
 `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 

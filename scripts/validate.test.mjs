@@ -867,10 +867,10 @@ test("mainnet takes Earn deposits and Fast transfers of USDC on every live Epoch
     ["robinhood", "ETH"],
   ])
     assert.equal(mainnet.supportedEvmChains[chain].bridges.epoch.tokens[symbol].contractAddress, EPOCH_NATIVE_TOKEN);
-  // Robinhood takes deposits; its withdrawals stay off.
+  // Robinhood takes deposits and withdrawals of the tokens Epoch quotes there.
   const robinhood = config.supportedEvmChains.robinhood.bridges.epoch;
   assert.equal(robinhood.depositEnabled, true);
-  assert.equal(robinhood.withdrawalEnabled, false);
+  assert.equal(robinhood.withdrawalEnabled, true);
 });
 /** The mainnet document with one vault changed by `change`. */
 const withVault = (change) => {

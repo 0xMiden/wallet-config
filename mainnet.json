@@ -293,7 +293,7 @@
       "bridges": {
         "epoch": {
           "depositEnabled": true,
-          "withdrawalEnabled": false,
+          "withdrawalEnabled": true,
           "tokens": {
             "ETH": {
               "contractAddress": "0x0000000000000000000000000000000000000000"
