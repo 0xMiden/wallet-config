@@ -7,12 +7,12 @@ A changed document must have a higher `version`. The `network` must match the fi
 Testnet is fully configured. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
-Mainnet Earn deposits are paused: both Aave V3 USDC vaults on Base and Ethereum
-set `depositsEnabled: false`. Keep `features.earn` on and the vault list present:
-the current wallet's positions screen requires that list to read existing positions.
-The Epoch hosts, chain routes and withdrawal switches stay in place for withdrawals
-and recovery. The Arbitrum Epoch route stays, but lists no Earn vault. Epoch fast bridge transfers (`fastBridge`) and NEAR intents stay
-off. Mainnet Swap uses
+Mainnet takes Earn deposits into both Aave V3 USDC vaults, on Base and Ethereum.
+Epoch fast bridge transfers (`fastBridge`) carry USDC to and from USDCx on Ethereum,
+Base, Arbitrum and Polygon, native ETH to and from Miden ETH on Ethereum, Base and
+Arbitrum, and native POL to and from Miden POL on Polygon. The Arbitrum and Polygon
+Epoch routes list no Earn vault. The Robinhood Chain route lists native ETH and USDG,
+both ways; its USDC is not listed until Epoch quotes it. NEAR intents stay off. Mainnet Swap uses
 `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 
@@ -95,9 +95,28 @@ and `withdrawalEnabled` booleans. A missing bridge is unavailable.
 
 | Bridge     | Route fields                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------- |
-| `epoch`    | `tokens.USDC.contractAddress`; optional `tokens.USDC.outputs` lists provider output names |
+| `epoch`    | `tokens.<SYMBOL>.contractAddress`; optional `tokens.<SYMBOL>.midenSymbol`, `tokens.<SYMBOL>.outputs` |
 | `agglayer` | `contractAddress`, `midenBridgeId`; optional `tokens.<SYMBOL>.contractAddress`, `tokenApiUrl` |
 | `usdcx`    | `domain`, `tokens.USDC.contractAddress`, optional `deposit`, optional `executor`          |
+
+Epoch `tokens` lists the EVM tokens a route carries, at least one, keyed by the
+symbol the wallet shows (upper-case letters and digits, at most 11). No address
+appears twice. The wallet takes the Miden faucet the solver settles a token into
+from the [token list](https://github.com/0xMiden/token-list): the entry whose
+symbol is the token's `midenSymbol`, or its key when `midenSymbol` is absent. Name
+`midenSymbol` when the two symbols differ, as USDC settles into `USDCX`. A token's
+`outputs` names provider outputs instead, which only the testnet USDC uses. List
+the chain's native coin at the zero address
+(`0x0000000000000000000000000000000000000000`), which is the address Epoch quotes
+it at. Epoch quotes no route for the wrapped token (WETH, WPOL) or for the
+`0xEeee…EEeE` placeholder. An Earn market must lend a route's `USDC`. The
+validator reads each listed ERC-20 contract on its chain while the route is on
+(the native coin has no contract to read), so stage a route
+with both switches off until Epoch quotes its tokens: the switches belong to the
+route, and every listed token of a route that is on is offered.
+
+Wallets released before the Epoch token list read only `tokens.USDC` and ignore
+`midenSymbol`; keep USDC listed on every route an Earn vault names.
 
 Agglayer `tokens` lists the ERC-20 source tokens the wallet offers for a deposit,
 keyed by the symbol the picker shows (upper-case letters and digits, at most 11).
