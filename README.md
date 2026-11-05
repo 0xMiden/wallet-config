@@ -7,7 +7,9 @@ A changed document must have a higher `version`. The `network` must match the fi
 Testnet is fully configured. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
-Mainnet takes Earn deposits into both Aave V3 USDC vaults, on Base and Ethereum.
+Mainnet Earn deposits are paused: both Aave V3 USDC vaults, on Base and Ethereum,
+set `depositsEnabled: false`. Keep `features.earn` on and the vault list present:
+the wallet's positions screen requires that list to read existing positions.
 Epoch fast bridge transfers (`fastBridge`) carry USDC to and from USDCx on Ethereum,
 Base, Arbitrum and Polygon, native ETH to and from Miden ETH on Ethereum, Base and
 Arbitrum, and native POL to and from Miden POL on Polygon. The Arbitrum and Polygon

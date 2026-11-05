@@ -842,13 +842,13 @@ const BASE_USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 const ARBITRUM_USDC = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
 const ETHEREUM_USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const POSITIONS = "https://positions-mainnet.epochprotocol.xyz";
-test("mainnet takes Earn deposits and Fast transfers of USDC on every live Epoch route", () => {
+test("mainnet pauses Earn deposits and takes Fast transfers of USDC on every live Epoch route", () => {
   const config = parseBridgeConfig(mainnet, "mainnet");
   assert.equal(config.features.earn, true);
   assert.equal(config.features.fastBridge, true);
   assert.deepEqual(config.earn.vaults.map(({ id, depositsEnabled }) => ({ id, depositsEnabled })), [
-    { id: "aave-v3-base-usdc", depositsEnabled: true },
-    { id: "aave-v3-ethereum-usdc", depositsEnabled: true },
+    { id: "aave-v3-base-usdc", depositsEnabled: false },
+    { id: "aave-v3-ethereum-usdc", depositsEnabled: false },
   ]);
   assert.equal(config["bridge-providers"].epoch.positionsUrl, POSITIONS);
   assert.equal(config["bridge-providers"].epoch.allocatorUrl, "https://mainnet-api.epochprotocol.xyz");
