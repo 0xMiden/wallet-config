@@ -545,6 +545,330 @@ test("nearIntents defaults off and accepts only explicit booleans", () => {
   );
 });
 
+// The pairs the wallet's Receive tab offers, with the asset ids of the 1Click token list.
+const nearIntentsSection = () => ({
+  serviceUrl: "https://one-click.example",
+  midenAssets: {
+    wbtc: {
+      assetId: "nep141:miden-0x3084d3c389ececd15fda9770d18c8a.omft.near",
+      faucetId: "0x3084d3c389ececd15fda9770d18c8a",
+      decimals: 8,
+    },
+    eth: {
+      assetId: "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near",
+      faucetId: "0x419f8f4bff72959132aa7cea15a4c1",
+      decimals: 8,
+    },
+    usdt: {
+      assetId: "nep141:miden-0x5cb79d29507d3ad17bb6dc60279e89.omft.near",
+      faucetId: "0x5cb79d29507d3ad17bb6dc60279e89",
+      decimals: 6,
+    },
+    usdcx: {
+      assetId: "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      faucetId: "0xe69e6ca6e39df1b10c1e5399399feb",
+      decimals: 6,
+    },
+    sol: {
+      assetId: "nep141:miden-0xf4f3dd3678997811522164320be4be.omft.near",
+      faucetId: "0xf4f3dd3678997811522164320be4be",
+      decimals: 8,
+    },
+  },
+  chains: {
+    eth: {
+      name: "Ethereum",
+      addressKind: "evm",
+      tokens: {
+        wBTC: {
+          assetId:
+            "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near",
+          decimals: 8,
+          contractAddress: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          miden: ["wbtc"],
+        },
+        ETH: { assetId: "nep141:eth.omft.near", decimals: 18, miden: ["eth"] },
+        USDT: {
+          assetId:
+            "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near",
+          decimals: 6,
+          contractAddress: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          miden: ["usdt"],
+        },
+        USDC: {
+          assetId:
+            "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+          decimals: 6,
+          contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          miden: ["usdcx"],
+        },
+      },
+    },
+    sol: {
+      name: "Solana",
+      addressKind: "solana",
+      tokens: {
+        SOL: { assetId: "nep141:sol.omft.near", decimals: 9, miden: ["sol"] },
+        USDT: {
+          assetId:
+            "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near",
+          decimals: 6,
+          contractAddress: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+          miden: ["usdt"],
+        },
+        USDC: {
+          assetId:
+            "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+          decimals: 6,
+          contractAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          miden: ["usdcx"],
+        },
+      },
+    },
+    btc: {
+      name: "Bitcoin",
+      addressKind: "bitcoin",
+      tokens: {
+        BTC: { assetId: "nep141:btc.omft.near", decimals: 8, miden: ["wbtc"] },
+      },
+    },
+    near: {
+      name: "NEAR",
+      addressKind: "near",
+      tokens: {
+        BTC: {
+          assetId: "nep141:nbtc.bridge.near",
+          decimals: 8,
+          contractAddress: "nbtc.bridge.near",
+          miden: ["wbtc"],
+        },
+        USDT: {
+          assetId: "nep141:usdt.tether-token.near",
+          decimals: 6,
+          contractAddress: "usdt.tether-token.near",
+          miden: ["usdt"],
+        },
+        USDC: {
+          assetId:
+            "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+          decimals: 6,
+          contractAddress:
+            "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+          miden: ["usdcx"],
+        },
+        ETH: {
+          assetId: "nep141:eth.bridge.near",
+          decimals: 18,
+          contractAddress: "eth.bridge.near",
+          miden: ["eth"],
+        },
+      },
+    },
+  },
+});
+const withNearIntents = (change = () => {}) => {
+  const body = copy();
+  body.nearIntents = nearIntentsSection();
+  change(body.nearIntents);
+  return body;
+};
+
+test("the nearIntents section parses its keyed maps into ordered lists", () => {
+  const result = parseBridgeConfigDetailed(withNearIntents(), "testnet");
+  assert.deepEqual(result.errors, []);
+  const section = result.config.nearIntents;
+  assert.equal(section.serviceUrl, "https://one-click.example");
+  assert.deepEqual(
+    section.midenAssets.map((asset) => asset.id),
+    ["wbtc", "eth", "usdt", "usdcx", "sol"],
+  );
+  assert.deepEqual(
+    section.chains.map((chain) => [
+      chain.id,
+      chain.addressKind,
+      chain.tokens.map((token) => token.symbol),
+    ]),
+    [
+      ["eth", "evm", ["wBTC", "ETH", "USDT", "USDC"]],
+      ["sol", "solana", ["SOL", "USDT", "USDC"]],
+      ["btc", "bitcoin", ["BTC"]],
+      ["near", "near", ["BTC", "USDT", "USDC", "ETH"]],
+    ],
+  );
+  assert.deepEqual(section.chains[0].tokens[3], {
+    symbol: "USDC",
+    assetId: "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+    decimals: 6,
+    contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    miden: ["usdcx"],
+  });
+  assert.equal(section.appFees, undefined);
+  const fees = [{ recipient: "wallet.near", fee: 25 }];
+  assert.deepEqual(
+    parseBridgeConfigDetailed(
+      withNearIntents((s) => {
+        s.appFees = fees;
+      }),
+      "testnet",
+    ).config.nearIntents.appFees,
+    fees,
+  );
+});
+
+test("the nearIntents section can be staged while the switch is off, and mainnet requires it while on", () => {
+  const staged = withNearIntents();
+  staged.features.nearIntents = false;
+  assert.deepEqual(errors(staged), []);
+  const required = "nearIntents is required while features.nearIntents is on";
+  const on = copy();
+  on.features.nearIntents = true;
+  assert.ok(!errors(on).includes(required));
+  assert.ok(parseBridgeConfigDetailed(on, "mainnet").errors.includes(required));
+  on.nearIntents = nearIntentsSection();
+  assert.ok(!parseBridgeConfigDetailed(on, "mainnet").errors.includes(required));
+});
+
+test("a bad nearIntents section rejects the document", async (t) => {
+  const first = (map) => Object.values(map)[0];
+  const cases = {
+    "a list in place of the section": (s, body) => {
+      body.nearIntents = [];
+    },
+    "no service URL": (s) => {
+      delete s.serviceUrl;
+    },
+    "an http service URL": (s) => {
+      s.serviceUrl = "http://one-click.example";
+    },
+    "a service URL with a query": (s) => {
+      s.serviceUrl = "https://one-click.example?key=1";
+    },
+    "four app fees": (s) => {
+      s.appFees = Array.from({ length: 4 }, () => ({
+        recipient: "wallet.near",
+        fee: 1,
+      }));
+    },
+    "an app fee above the ceiling": (s) => {
+      s.appFees = [{ recipient: "wallet.near", fee: 1001 }];
+    },
+    "app fees that total above the ceiling": (s) => {
+      s.appFees = [
+        { recipient: "a.near", fee: 600 },
+        { recipient: "b.near", fee: 600 },
+      ];
+    },
+    "an app fee recipient that is not an account name": (s) => {
+      s.appFees = [{ recipient: "Wallet Near", fee: 1 }];
+    },
+    "the old list shape of midenAssets": (s) => {
+      s.midenAssets = Object.values(s.midenAssets);
+    },
+    "no Miden asset": (s) => {
+      s.midenAssets = {};
+    },
+    "a Miden asset id in upper case": (s) => {
+      s.midenAssets.USDCX = s.midenAssets.usdcx;
+    },
+    "a Miden asset with no asset id": (s) => {
+      delete first(s.midenAssets).assetId;
+    },
+    "a Miden asset with a short faucet id": (s) => {
+      first(s.midenAssets).faucetId = "0x3084";
+    },
+    "a Miden asset with fractional decimals": (s) => {
+      first(s.midenAssets).decimals = 6.5;
+    },
+    "a Miden asset with 39 decimals": (s) => {
+      first(s.midenAssets).decimals = 39;
+    },
+    "two Miden assets with one asset id": (s) => {
+      s.midenAssets.eth.assetId = s.midenAssets.wbtc.assetId;
+    },
+    "two Miden assets with one faucet": (s) => {
+      s.midenAssets.eth.faucetId = s.midenAssets.wbtc.faucetId.toUpperCase().replace("0X", "0x");
+    },
+    "no chain": (s) => {
+      s.chains = {};
+    },
+    "a chain named miden": (s) => {
+      s.chains.miden = s.chains.eth;
+      delete s.chains.eth;
+    },
+    "a chain id in upper case": (s) => {
+      s.chains.ETH = s.chains.eth;
+      delete s.chains.eth;
+    },
+    "a chain with no name": (s) => {
+      delete s.chains.eth.name;
+    },
+    "a chain name with a control character": (s) => {
+      s.chains.eth.name = "Ether\u0000eum";
+    },
+    "an unknown address kind": (s) => {
+      s.chains.eth.addressKind = "cosmos";
+    },
+    "a chain with no token": (s) => {
+      s.chains.btc.tokens = {};
+    },
+    "a token symbol that is a whole number": (s) => {
+      s.chains.btc.tokens = { 123: s.chains.btc.tokens.BTC };
+    },
+    "a token with no asset id": (s) => {
+      delete s.chains.btc.tokens.BTC.assetId;
+    },
+    "a token with negative decimals": (s) => {
+      s.chains.btc.tokens.BTC.decimals = -1;
+    },
+    "a token with an empty contract address": (s) => {
+      s.chains.eth.tokens.USDC.contractAddress = "";
+    },
+    "a token that names no Miden asset": (s) => {
+      s.chains.btc.tokens.BTC.miden = [];
+    },
+    "a token that names an unknown Miden asset": (s) => {
+      s.chains.btc.tokens.BTC.miden = ["btc"];
+    },
+    "a token that names one Miden asset twice": (s) => {
+      s.chains.btc.tokens.BTC.miden = ["wbtc", "wbtc"];
+    },
+    "a token with a Miden asset that is not a list": (s) => {
+      s.chains.btc.tokens.BTC.miden = "wbtc";
+    },
+    "one asset id on two chains": (s) => {
+      s.chains.near.tokens.BTC.assetId = s.chains.btc.tokens.BTC.assetId;
+    },
+    "a token with the asset id of a Miden asset": (s) => {
+      s.chains.btc.tokens.BTC.assetId = s.midenAssets.wbtc.assetId;
+    },
+  };
+  for (const [name, change] of Object.entries(cases)) {
+    await t.test(name, () => {
+      const body = withNearIntents();
+      change(body.nearIntents, body);
+      const found = errors(body);
+      assert.ok(
+        found.length > 0 && found.every((error) => error.includes("nearIntents")),
+        `${name}: ${JSON.stringify(found)}`,
+      );
+      assert.equal(parseBridgeConfigDetailed(body, "testnet").config, null);
+    });
+  }
+});
+
+test("repeated nearIntents keys are detected before JSON loses them", () => {
+  const text =
+    '{"nearIntents":{"midenAssets":{"usdcx":{},"usdcx":{}},"chains":{"eth":{"tokens":{"USDC":{},"USDC":{}}},"eth":{}}}}';
+  assert.deepEqual(duplicateKeys(text, ["nearIntents", "midenAssets"]), [
+    "usdcx",
+  ]);
+  assert.deepEqual(duplicateKeys(text, ["nearIntents", "chains"]), ["eth"]);
+  assert.deepEqual(
+    duplicateKeys(text, ["nearIntents", "chains", "eth", "tokens"]),
+    ["USDC"],
+  );
+});
+
 const FIXTURES = new URL("./fixtures/", import.meta.url);
 const readFixture = (kind, name) =>
   JSON.parse(readFileSync(new URL(`${kind}/${name}`, FIXTURES)));

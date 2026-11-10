@@ -77,6 +77,20 @@ const EARN_VAULT_ID = /^[a-z][a-z0-9-]*$/;
 const EARN_MARKET_UID = /^([A-Z0-9_]+):([1-9][0-9]*):(0x[0-9a-f]{40})$/;
 // An Earn vault logo: a file under `icons/`, relative to the directory the document is fetched from.
 const EARN_VAULT_LOGO = /^icons\/[a-z0-9]+(-[a-z0-9]+)*\.(svg|png)$/;
+// A NEAR Intents Miden asset id: a lower-case letter, then lower-case letters, digits and hyphens.
+const NEAR_INTENTS_MIDEN_ASSET_KEY = /^[a-z][a-z0-9-]*$/;
+// A NEAR Intents chain id: the 1Click `blockchain` name.
+const NEAR_INTENTS_CHAIN_KEY = /^[a-z][a-z0-9-]{0,31}$/;
+// A key that JSON.parse moves in front of the other keys, so it cannot keep its place in the document.
+const INTEGER_KEY = /^(0|[1-9][0-9]*)$/;
+// A 1Click fee recipient: a NEAR account name.
+const NEAR_INTENTS_FEE_RECIPIENT = /^[a-z0-9._-]{2,64}$/;
+/** How the wallet checks a refund address on a NEAR Intents origin chain. */
+export const NEAR_INTENTS_ADDRESS_KINDS = ["evm", "solana", "bitcoin", "near"];
+export const MAX_NEAR_INTENTS_MIDEN_ASSETS = 64;
+export const MAX_NEAR_INTENTS_CHAINS = 32;
+export const MAX_NEAR_INTENTS_TOKENS_PER_CHAIN = 64;
+export const MAX_NEAR_INTENTS_TOKEN_OUTPUTS = 8;
 // The eight bytes every PNG file starts with.
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 // An SVG starts with its root element, after an optional XML declaration and whitespace.
@@ -520,6 +534,13 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     featuresIn.arcadeGcPurchase === true,
     errors,
   );
+  const nearIntents = readNearIntents(
+    body.nearIntents,
+    featuresIn.nearIntents === true,
+    network,
+    options.allowLocalHttp === true,
+    errors,
+  );
   const onboarding = readSection(body, "onboarding", errors);
   if (
     onboarding.inviteOnly !== undefined &&
@@ -555,6 +576,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           ...(guardians === undefined ? {} : { guardians }),
           ...(earn === undefined ? {} : { earn }),
           ...(arcade === undefined ? {} : { arcade }),
+          ...(nearIntents === undefined ? {} : { nearIntents }),
         },
     errors,
     dropped,
@@ -815,6 +837,228 @@ function readArcade(value, purchaseOn, errors) {
   if (seller === undefined && value.sale.seller === undefined)
     errors.push("arcade.sale.seller is required");
   return seller === undefined ? undefined : { sale: { seller } };
+}
+
+/**
+ * The wallet's NEAR Intents deposits (schema.ts nearIntents): the origin chains and tokens the
+ * Receive tab offers, in order, each with the Miden tokens it can become. `midenAssets`, `chains`
+ * and each chain's `tokens` are maps, and the order of their keys is the order the wallet shows. A
+ * bad entry rejects the document. The section can be staged while `features.nearIntents` is off;
+ * mainnet, the only network the wallet reads it on, requires it while the switch is on.
+ */
+function readNearIntents(value, on, network, allowLocalHttp, errors) {
+  if (value === undefined) {
+    if (on && network === "mainnet")
+      errors.push("nearIntents is required while features.nearIntents is on");
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    errors.push("nearIntents must be an object");
+    return undefined;
+  }
+  const before = errors.length;
+  const text = (entry, field, label, maxLength) => {
+    const raw = entry[field];
+    if (
+      typeof raw !== "string" ||
+      raw.length < 1 ||
+      raw.length > maxLength ||
+      CONTROL_CHARACTER.test(raw)
+    ) {
+      errors.push(
+        `${label}.${field} must be 1 to ${maxLength} characters with no control character`,
+      );
+      return undefined;
+    }
+    return raw;
+  };
+  const decimals = (entry, label) => {
+    if (
+      !Number.isSafeInteger(entry.decimals) ||
+      entry.decimals < 0 ||
+      entry.decimals > 38
+    )
+      errors.push(`${label}.decimals must be an integer from 0 to 38`);
+    return entry.decimals;
+  };
+  const entries = (map, label, max) => {
+    if (!isRecord(map)) {
+      errors.push(`${label} must be an object`);
+      return [];
+    }
+    const list = Object.entries(map);
+    if (list.length < 1 || list.length > max)
+      errors.push(`${label} must have 1 to ${max} entries`);
+    return list;
+  };
+
+  if (value.serviceUrl === undefined)
+    errors.push("nearIntents.serviceUrl is required");
+  const serviceUrl = readUrl(
+    value,
+    "nearIntents",
+    "serviceUrl",
+    allowLocalHttp,
+    errors,
+  );
+  if (typeof value.serviceUrl === "string" && value.serviceUrl.length > 512)
+    errors.push("nearIntents.serviceUrl must be at most 512 characters");
+
+  let appFees;
+  if (value.appFees !== undefined) {
+    if (!Array.isArray(value.appFees) || value.appFees.length > 3) {
+      errors.push("nearIntents.appFees must be a list of at most 3 fees");
+    } else {
+      appFees = value.appFees.map((fee, index) => {
+        const label = `nearIntents.appFees[${index}]`;
+        if (!isRecord(fee)) {
+          errors.push(`${label} must be an object`);
+          return undefined;
+        }
+        if (
+          typeof fee.recipient !== "string" ||
+          !NEAR_INTENTS_FEE_RECIPIENT.test(fee.recipient)
+        )
+          errors.push(`${label}.recipient must be a NEAR account name`);
+        if (!Number.isSafeInteger(fee.fee) || fee.fee < 0 || fee.fee > 1000)
+          errors.push(`${label}.fee must be an integer from 0 to 1000`);
+        return { recipient: fee.recipient, fee: fee.fee };
+      });
+      const total = value.appFees.reduce(
+        (sum, fee) => sum + (isRecord(fee) && Number.isSafeInteger(fee.fee) ? fee.fee : 0),
+        0,
+      );
+      if (total > 1000)
+        errors.push("nearIntents.appFees must total at most 1000");
+    }
+  }
+
+  // Every 1Click asset id in the section, Miden ones included: a token must not repeat one.
+  const assetIds = new Set();
+  const faucetIds = new Set();
+  const midenAssets = [];
+  for (const [id, asset] of entries(
+    value.midenAssets,
+    "nearIntents.midenAssets",
+    MAX_NEAR_INTENTS_MIDEN_ASSETS,
+  )) {
+    const label = `nearIntents.midenAssets.${id}`;
+    if (!NEAR_INTENTS_MIDEN_ASSET_KEY.test(id))
+      errors.push(`${label} is not a Miden asset id`);
+    if (!isRecord(asset)) {
+      errors.push(`${label} must be an object`);
+      continue;
+    }
+    const assetId = text(asset, "assetId", label, 256);
+    const faucetId = readPattern(
+      asset,
+      label,
+      "faucetId",
+      MIDEN_ACCOUNT_ID,
+      "a 15-byte 0x account id",
+      errors,
+    );
+    if (faucetId === undefined && asset.faucetId === undefined)
+      errors.push(`${label}.faucetId is required`);
+    if (assetId !== undefined) {
+      if (assetIds.has(assetId))
+        errors.push(`nearIntents names the asset ${assetId} twice`);
+      assetIds.add(assetId);
+    }
+    if (faucetId !== undefined) {
+      if (faucetIds.has(faucetId))
+        errors.push(`nearIntents.midenAssets names the faucet ${faucetId} twice`);
+      faucetIds.add(faucetId);
+    }
+    midenAssets.push({ id, assetId, faucetId, decimals: decimals(asset, label) });
+  }
+  const midenIds = new Set(midenAssets.map((asset) => asset.id));
+
+  const chains = [];
+  for (const [id, chain] of entries(
+    value.chains,
+    "nearIntents.chains",
+    MAX_NEAR_INTENTS_CHAINS,
+  )) {
+    const label = `nearIntents.chains.${id}`;
+    if (!NEAR_INTENTS_CHAIN_KEY.test(id) || id === "miden")
+      errors.push(`${label} is not an origin chain id`);
+    if (!isRecord(chain)) {
+      errors.push(`${label} must be an object`);
+      continue;
+    }
+    const name = text(chain, "name", label, 64);
+    if (!NEAR_INTENTS_ADDRESS_KINDS.includes(chain.addressKind))
+      errors.push(
+        `${label}.addressKind must be one of ${NEAR_INTENTS_ADDRESS_KINDS.join(", ")}`,
+      );
+    const tokens = [];
+    for (const [symbol, token] of entries(
+      chain.tokens,
+      `${label}.tokens`,
+      MAX_NEAR_INTENTS_TOKENS_PER_CHAIN,
+    )) {
+      const tokenLabel = `${label}.tokens.${symbol}`;
+      if (
+        symbol.length < 1 ||
+        symbol.length > 32 ||
+        CONTROL_CHARACTER.test(symbol)
+      )
+        errors.push(`${tokenLabel} is not a token symbol`);
+      if (INTEGER_KEY.test(symbol))
+        errors.push(
+          `${tokenLabel} is a whole number, which cannot keep its place in the list`,
+        );
+      if (!isRecord(token)) {
+        errors.push(`${tokenLabel} must be an object`);
+        continue;
+      }
+      const assetId = text(token, "assetId", tokenLabel, 256);
+      if (assetId !== undefined) {
+        if (assetIds.has(assetId))
+          errors.push(`nearIntents names the asset ${assetId} twice`);
+        assetIds.add(assetId);
+      }
+      const contractAddress =
+        token.contractAddress === undefined
+          ? undefined
+          : text(token, "contractAddress", tokenLabel, 256);
+      const outputs = token.miden;
+      if (
+        !Array.isArray(outputs) ||
+        outputs.length < 1 ||
+        outputs.length > MAX_NEAR_INTENTS_TOKEN_OUTPUTS
+      ) {
+        errors.push(
+          `${tokenLabel}.miden must list 1 to ${MAX_NEAR_INTENTS_TOKEN_OUTPUTS} Miden asset ids`,
+        );
+      } else {
+        for (const output of outputs)
+          if (typeof output !== "string" || !midenIds.has(output))
+            errors.push(
+              `${tokenLabel}.miden names ${JSON.stringify(output)}, which nearIntents.midenAssets does not have`,
+            );
+        if (new Set(outputs).size !== outputs.length)
+          errors.push(`${tokenLabel}.miden names a Miden asset twice`);
+      }
+      tokens.push({
+        symbol,
+        assetId,
+        decimals: decimals(token, tokenLabel),
+        ...(contractAddress === undefined ? {} : { contractAddress }),
+        miden: outputs,
+      });
+    }
+    chains.push({ id, name, addressKind: chain.addressKind, tokens });
+  }
+
+  if (errors.length > before) return undefined;
+  return {
+    serviceUrl,
+    ...(appFees === undefined ? {} : { appFees }),
+    chains,
+    midenAssets,
+  };
 }
 
 /**
@@ -1555,6 +1799,17 @@ export async function validateFile(
     ...countdownErrors(body),
     ...duplicateKeys(text, ["supportedEvmChains"]).map(
       (key) => `supportedEvmChains repeats ${key}`,
+    ),
+    // JSON.parse keeps the last of two equal keys, so a repeated entry would silently drop one.
+    ...["midenAssets", "chains"].flatMap((map) =>
+      duplicateKeys(text, ["nearIntents", map]).map(
+        (key) => `nearIntents.${map} repeats ${key}`,
+      ),
+    ),
+    ...(parsed.config.nearIntents?.chains ?? []).flatMap((chain) =>
+      duplicateKeys(text, ["nearIntents", "chains", chain.id, "tokens"]).map(
+        (key) => `nearIntents.chains.${chain.id}.tokens repeats ${key}`,
+      ),
     ),
     ...duplicateKeys(text, []).filter((key) => key === "geo").map(
       (key) => `document repeats ${key}`,
