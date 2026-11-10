@@ -629,7 +629,8 @@ const nearIntentsSection = () => ({
       name: "Bitcoin",
       addressKind: "bitcoin",
       tokens: {
-        BTC: { assetId: "nep141:btc.omft.near", decimals: 8, miden: ["wbtc"] },
+        // The 1Click token list has two ids for Bitcoin. Only quotes for this one pass the signature check.
+        BTC: { assetId: "1cs_v1:btc:native:coin", decimals: 8, miden: ["wbtc"] },
       },
     },
     near: {
