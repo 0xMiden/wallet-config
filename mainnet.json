@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 18,
+  "version": 19,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
@@ -52,6 +52,131 @@
     "bridgeOut": true,
     "nearIntents": false,
     "arcadeGcPurchase": true
+  },
+  "nearIntents": {
+    "serviceUrl": "https://one-click.example",
+    "midenAssets": {
+      "wbtc": {
+        "assetId": "1cs_v1:miden:ft:0x3084d3c389ececd15fda9770d18c8a",
+        "faucetId": "0x3084d3c389ececd15fda9770d18c8a",
+        "decimals": 8
+      },
+      "eth": {
+        "assetId": "1cs_v1:miden:ft:0x419f8f4bff72959132aa7cea15a4c1",
+        "faucetId": "0x419f8f4bff72959132aa7cea15a4c1",
+        "decimals": 8
+      },
+      "usdt": {
+        "assetId": "1cs_v1:miden:ft:0x5cb79d29507d3ad17bb6dc60279e89",
+        "faucetId": "0x5cb79d29507d3ad17bb6dc60279e89",
+        "decimals": 6
+      },
+      "usdcx": {
+        "assetId": "1cs_v1:miden:ft:0xe69e6ca6e39df1b10c1e5399399feb",
+        "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb",
+        "decimals": 6
+      },
+      "sol": {
+        "assetId": "1cs_v1:miden:ft:0xf4f3dd3678997811522164320be4be",
+        "faucetId": "0xf4f3dd3678997811522164320be4be",
+        "decimals": 8
+      }
+    },
+    "chains": {
+      "eth": {
+        "name": "Ethereum",
+        "addressKind": "evm",
+        "tokens": {
+          "wBTC": {
+            "assetId": "1cs_v1:eth:erc20:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            "decimals": 8,
+            "contractAddress": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            "miden": ["wbtc"]
+          },
+          "ETH": {
+            "assetId": "1cs_v1:eth:native:coin",
+            "decimals": 18,
+            "miden": ["eth"]
+          },
+          "USDT": {
+            "assetId": "1cs_v1:eth:erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "decimals": 6,
+            "contractAddress": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "miden": ["usdt"]
+          },
+          "USDC": {
+            "assetId": "1cs_v1:eth:erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "decimals": 6,
+            "contractAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "miden": ["usdcx"]
+          }
+        }
+      },
+      "sol": {
+        "name": "Solana",
+        "addressKind": "solana",
+        "tokens": {
+          "SOL": {
+            "assetId": "1cs_v1:sol:native:coin",
+            "decimals": 9,
+            "miden": ["sol"]
+          },
+          "USDT": {
+            "assetId": "1cs_v1:sol:spl:Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+            "decimals": 6,
+            "contractAddress": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+            "miden": ["usdt"]
+          },
+          "USDC": {
+            "assetId": "1cs_v1:sol:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6,
+            "contractAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "miden": ["usdcx"]
+          }
+        }
+      },
+      "btc": {
+        "name": "Bitcoin",
+        "addressKind": "bitcoin",
+        "tokens": {
+          "BTC": {
+            "assetId": "1cs_v1:btc:native:coin",
+            "decimals": 8,
+            "miden": ["wbtc"]
+          }
+        }
+      },
+      "near": {
+        "name": "NEAR",
+        "addressKind": "near",
+        "tokens": {
+          "BTC": {
+            "assetId": "1cs_v1:near:nep141:nbtc.bridge.near",
+            "decimals": 8,
+            "contractAddress": "nbtc.bridge.near",
+            "miden": ["wbtc"]
+          },
+          "USDT": {
+            "assetId": "1cs_v1:near:nep141:usdt.tether-token.near",
+            "decimals": 6,
+            "contractAddress": "usdt.tether-token.near",
+            "miden": ["usdt"]
+          },
+          "USDC": {
+            "assetId": "1cs_v1:near:nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+            "decimals": 6,
+            "contractAddress": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+            "miden": ["usdcx"]
+          },
+          "ETH": {
+            "assetId": "1cs_v1:near:nep141:eth.bridge.near",
+            "decimals": 18,
+            "contractAddress": "eth.bridge.near",
+            "miden": ["eth"]
+          }
+        }
+      }
+    }
   },
   "arcade": {
     "sale": {

@@ -550,27 +550,27 @@ const nearIntentsSection = () => ({
   serviceUrl: "https://one-click.example",
   midenAssets: {
     wbtc: {
-      assetId: "nep141:miden-0x3084d3c389ececd15fda9770d18c8a.omft.near",
+      assetId: "1cs_v1:miden:ft:0x3084d3c389ececd15fda9770d18c8a",
       faucetId: "0x3084d3c389ececd15fda9770d18c8a",
       decimals: 8,
     },
     eth: {
-      assetId: "nep141:miden-0x419f8f4bff72959132aa7cea15a4c1.omft.near",
+      assetId: "1cs_v1:miden:ft:0x419f8f4bff72959132aa7cea15a4c1",
       faucetId: "0x419f8f4bff72959132aa7cea15a4c1",
       decimals: 8,
     },
     usdt: {
-      assetId: "nep141:miden-0x5cb79d29507d3ad17bb6dc60279e89.omft.near",
+      assetId: "1cs_v1:miden:ft:0x5cb79d29507d3ad17bb6dc60279e89",
       faucetId: "0x5cb79d29507d3ad17bb6dc60279e89",
       decimals: 6,
     },
     usdcx: {
-      assetId: "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      assetId: "1cs_v1:miden:ft:0xe69e6ca6e39df1b10c1e5399399feb",
       faucetId: "0xe69e6ca6e39df1b10c1e5399399feb",
       decimals: 6,
     },
     sol: {
-      assetId: "nep141:miden-0xf4f3dd3678997811522164320be4be.omft.near",
+      assetId: "1cs_v1:miden:ft:0xf4f3dd3678997811522164320be4be",
       faucetId: "0xf4f3dd3678997811522164320be4be",
       decimals: 8,
     },
@@ -581,23 +581,20 @@ const nearIntentsSection = () => ({
       addressKind: "evm",
       tokens: {
         wBTC: {
-          assetId:
-            "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near",
+          assetId: "1cs_v1:eth:erc20:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
           decimals: 8,
           contractAddress: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
           miden: ["wbtc"],
         },
-        ETH: { assetId: "nep141:eth.omft.near", decimals: 18, miden: ["eth"] },
+        ETH: { assetId: "1cs_v1:eth:native:coin", decimals: 18, miden: ["eth"] },
         USDT: {
-          assetId:
-            "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near",
+          assetId: "1cs_v1:eth:erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
           decimals: 6,
           contractAddress: "0xdac17f958d2ee523a2206206994597c13d831ec7",
           miden: ["usdt"],
         },
         USDC: {
-          assetId:
-            "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+          assetId: "1cs_v1:eth:erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
           decimals: 6,
           contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
           miden: ["usdcx"],
@@ -608,17 +605,15 @@ const nearIntentsSection = () => ({
       name: "Solana",
       addressKind: "solana",
       tokens: {
-        SOL: { assetId: "nep141:sol.omft.near", decimals: 9, miden: ["sol"] },
+        SOL: { assetId: "1cs_v1:sol:native:coin", decimals: 9, miden: ["sol"] },
         USDT: {
-          assetId:
-            "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near",
+          assetId: "1cs_v1:sol:spl:Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
           decimals: 6,
           contractAddress: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
           miden: ["usdt"],
         },
         USDC: {
-          assetId:
-            "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+          assetId: "1cs_v1:sol:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
           decimals: 6,
           contractAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
           miden: ["usdcx"],
@@ -629,7 +624,6 @@ const nearIntentsSection = () => ({
       name: "Bitcoin",
       addressKind: "bitcoin",
       tokens: {
-        // The 1Click token list has two ids for Bitcoin. Only quotes for this one pass the signature check.
         BTC: { assetId: "1cs_v1:btc:native:coin", decimals: 8, miden: ["wbtc"] },
       },
     },
@@ -638,27 +632,27 @@ const nearIntentsSection = () => ({
       addressKind: "near",
       tokens: {
         BTC: {
-          assetId: "nep141:nbtc.bridge.near",
+          assetId: "1cs_v1:near:nep141:nbtc.bridge.near",
           decimals: 8,
           contractAddress: "nbtc.bridge.near",
           miden: ["wbtc"],
         },
         USDT: {
-          assetId: "nep141:usdt.tether-token.near",
+          assetId: "1cs_v1:near:nep141:usdt.tether-token.near",
           decimals: 6,
           contractAddress: "usdt.tether-token.near",
           miden: ["usdt"],
         },
         USDC: {
           assetId:
-            "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+            "1cs_v1:near:nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
           decimals: 6,
           contractAddress:
             "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
           miden: ["usdcx"],
         },
         ETH: {
-          assetId: "nep141:eth.bridge.near",
+          assetId: "1cs_v1:near:nep141:eth.bridge.near",
           decimals: 18,
           contractAddress: "eth.bridge.near",
           miden: ["eth"],
@@ -698,7 +692,7 @@ test("the nearIntents section parses its keyed maps into ordered lists", () => {
   );
   assert.deepEqual(section.chains[0].tokens[3], {
     symbol: "USDC",
-    assetId: "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+    assetId: "1cs_v1:eth:erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     decimals: 6,
     contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     miden: ["usdcx"],

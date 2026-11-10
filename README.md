@@ -205,7 +205,7 @@ wallet reads the section on mainnet only.
   "serviceUrl": "https://<1Click proxy host>",
   "midenAssets": {
     "usdcx": {
-      "assetId": "nep141:miden-0xe69e6ca6e39df1b10c1e5399399feb.omft.near",
+      "assetId": "1cs_v1:miden:ft:0xe69e6ca6e39df1b10c1e5399399feb",
       "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb",
       "decimals": 6
     }
@@ -216,7 +216,7 @@ wallet reads the section on mainnet only.
       "addressKind": "solana",
       "tokens": {
         "USDC": {
-          "assetId": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+          "assetId": "1cs_v1:sol:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
           "decimals": 6,
           "contractAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
           "miden": ["usdcx"]
