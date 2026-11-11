@@ -24,10 +24,11 @@ the solver's `/v2/pairs` endpoint.
 `nearIntents` and `arcadeGcPurchase`. Each value must be a boolean; an omitted
 `nearIntents` or `arcadeGcPurchase` defaults to `false`. `arcadeGcPurchase`
 turns on buying Game Coins in Arcade and requires the `arcade` section (see
-[Arcade GC sale](#arcade-gc-sale)). `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
-until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
-configuration have been verified. Do not enable it with placeholder production
-URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
+[Arcade GC sale](#arcade-gc-sale)). `nearIntents` turns on deposits into Miden
+through NEAR Intents (1Click) on the wallet's Receive page; its pairs are the
+`nearIntents` section (see [NEAR Intents deposits](#near-intents-deposits)).
+Keep it false until the proxy, the pairs and the receipt configuration have been
+verified. Do not enable it with placeholder production URLs, keys, or pairs. `earn` controls new Earn deposits. `fastBridge` controls
 Epoch transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer
 deposits and withdrawals. A false global switch disables new transfers even when
 a chain route is enabled. When a bridge switch is omitted, the per-chain switches apply.
@@ -191,6 +192,71 @@ decision the document makes for the Arcade purchase: the wallet finds the live
 sale note on chain by the tag the PSWAP script derives from the GC and USDCx
 faucets, prices a purchase from the note's own terms, and accepts only a note
 whose creator is this seller. Nothing else about the sale is configured here.
+
+## NEAR Intents deposits
+
+`nearIntents` lists the deposits the wallet's Receive page offers through NEAR
+Intents (1Click): the user picks an origin chain and token, the wallet shows a
+1Click deposit address, and the paired Miden token arrives in the account. The
+wallet reads the section on mainnet only.
+
+```json
+"nearIntents": {
+  "serviceUrl": "https://<1Click proxy host>",
+  "midenAssets": {
+    "usdcx": {
+      "assetId": "1cs_v1:miden:ft:0xe69e6ca6e39df1b10c1e5399399feb",
+      "faucetId": "0xe69e6ca6e39df1b10c1e5399399feb",
+      "decimals": 6
+    }
+  },
+  "chains": {
+    "sol": {
+      "name": "Solana",
+      "addressKind": "solana",
+      "tokens": {
+        "USDC": {
+          "assetId": "1cs_v1:sol:spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "decimals": 6,
+          "contractAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "miden": ["usdcx"]
+        }
+      }
+    }
+  }
+}
+```
+
+`midenAssets`, `chains` and each chain's `tokens` are maps. The order of their
+keys is the order the wallet shows, and a repeated key is refused.
+
+- `serviceUrl` is the wallet's 1Click proxy: HTTPS, no credentials, query or
+  fragment. The 1Click partner key stays on the proxy and never appears here.
+- The section names no app fees. NEAR sets them up on the partner key, and
+  1Click adds them to every quote. A leftover `appFees` key is not read.
+- `midenAssets` has 1 to 64 entries. The key is the short id a token refers to:
+  a lower-case letter, then lower-case letters, digits and hyphens. `assetId` is
+  the 1Click asset id, `faucetId` the 15-byte `0x` faucet id and `decimals` an
+  integer from 0 to 38. No two entries share an asset id or a faucet.
+- `chains` has 1 to 32 entries. The key is the 1Click `blockchain` name, never
+  `miden`. `name` is the label the wallet shows, 1 to 64 characters.
+  `addressKind` is how the wallet checks a refund address: `evm`, `solana`,
+  `bitcoin` or `near`.
+- `tokens` has 1 to 64 entries per chain. The key is the symbol the wallet
+  shows, 1 to 32 characters, and not a whole number: JSON would move such a key
+  to the front. `assetId` is the 1Click asset id, unique in the section.
+  `decimals` is an integer from 0 to 38. `contractAddress` is optional. `miden`
+  lists 1 to 8 distinct `midenAssets` ids: the Miden tokens this token can
+  become.
+
+These values are the wallet's trust anchor. It offers a token only while the
+live 1Click token list carries the same asset id on the same chain with the same
+decimals and contract address, and a Miden token only while its faucet's
+on-chain decimals agree. So copy each value from the 1Click token list
+(`GET /v0/tokens`) and the faucet itself; never map a token by its symbol.
+
+The section can be staged while `features.nearIntents` is false. Mainnet
+requires it while the switch is true.
 
 ## Guardian operators
 
