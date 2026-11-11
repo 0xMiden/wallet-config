@@ -50,7 +50,7 @@
     "fastBridge": true,
     "bridgeIn": true,
     "bridgeOut": true,
-    "nearIntents": false,
+    "nearIntents": true,
     "arcadeGcPurchase": true
   },
   "nearIntents": {
