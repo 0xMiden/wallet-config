@@ -698,16 +698,15 @@ test("the nearIntents section parses its keyed maps into ordered lists", () => {
     miden: ["usdcx"],
   });
   assert.equal(section.appFees, undefined);
-  const fees = [{ recipient: "wallet.near", fee: 25 }];
-  assert.deepEqual(
-    parseBridgeConfigDetailed(
-      withNearIntents((s) => {
-        s.appFees = fees;
-      }),
-      "testnet",
-    ).config.nearIntents.appFees,
-    fees,
+  // A document that still names appFees is accepted and the list is not read: NEAR sets the fees up on the key.
+  const withFees = parseBridgeConfigDetailed(
+    withNearIntents((s) => {
+      s.appFees = [{ recipient: "wallet.near", fee: 25 }];
+    }),
+    "testnet",
   );
+  assert.deepEqual(withFees.errors, []);
+  assert.equal(withFees.config.nearIntents.appFees, undefined);
 });
 
 test("the nearIntents section can be staged while the switch is off, and mainnet requires it while on", () => {
@@ -737,24 +736,6 @@ test("a bad nearIntents section rejects the document", async (t) => {
     },
     "a service URL with a query": (s) => {
       s.serviceUrl = "https://one-click.example?key=1";
-    },
-    "four app fees": (s) => {
-      s.appFees = Array.from({ length: 4 }, () => ({
-        recipient: "wallet.near",
-        fee: 1,
-      }));
-    },
-    "an app fee above the ceiling": (s) => {
-      s.appFees = [{ recipient: "wallet.near", fee: 1001 }];
-    },
-    "app fees that total above the ceiling": (s) => {
-      s.appFees = [
-        { recipient: "a.near", fee: 600 },
-        { recipient: "b.near", fee: 600 },
-      ];
-    },
-    "an app fee recipient that is not an account name": (s) => {
-      s.appFees = [{ recipient: "Wallet Near", fee: 1 }];
     },
     "the old list shape of midenAssets": (s) => {
       s.midenAssets = Object.values(s.midenAssets);

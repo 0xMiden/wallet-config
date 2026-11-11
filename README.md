@@ -232,9 +232,8 @@ keys is the order the wallet shows, and a repeated key is refused.
 
 - `serviceUrl` is the wallet's 1Click proxy: HTTPS, no credentials, query or
   fragment. The 1Click partner key stays on the proxy and never appears here.
-- `appFees` is optional: at most three `{ "recipient", "fee" }` entries, a NEAR
-  account name and basis points from 0 to 1000, which total at most 1000. It
-  must equal the proxy's own fee list.
+- The section names no app fees. NEAR sets them up on the partner key, and
+  1Click adds them to every quote. A leftover `appFees` key is not read.
 - `midenAssets` has 1 to 64 entries. The key is the short id a token refers to:
   a lower-case letter, then lower-case letters, digits and hyphens. `assetId` is
   the 1Click asset id, `faucetId` the 15-byte `0x` faucet id and `decimals` an

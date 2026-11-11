@@ -55,7 +55,6 @@
   },
   "nearIntents": {
     "serviceUrl": "http://localhost:8787",
-    "appFees": [{ "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd", "fee": 20 }],
     "midenAssets": {
       "wbtc": {
         "assetId": "1cs_v1:miden:ft:0x3084d3c389ececd15fda9770d18c8a",

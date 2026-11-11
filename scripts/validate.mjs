@@ -83,8 +83,6 @@ const NEAR_INTENTS_MIDEN_ASSET_KEY = /^[a-z][a-z0-9-]*$/;
 const NEAR_INTENTS_CHAIN_KEY = /^[a-z][a-z0-9-]{0,31}$/;
 // A key that JSON.parse moves in front of the other keys, so it cannot keep its place in the document.
 const INTEGER_KEY = /^(0|[1-9][0-9]*)$/;
-// A 1Click fee recipient: a NEAR account name.
-const NEAR_INTENTS_FEE_RECIPIENT = /^[a-z0-9._-]{2,64}$/;
 /** How the wallet checks a refund address on a NEAR Intents origin chain. */
 export const NEAR_INTENTS_ADDRESS_KINDS = ["evm", "solana", "bitcoin", "near"];
 export const MAX_NEAR_INTENTS_MIDEN_ASSETS = 64;
@@ -904,34 +902,7 @@ function readNearIntents(value, on, network, allowLocalHttp, errors) {
   if (typeof value.serviceUrl === "string" && value.serviceUrl.length > 512)
     errors.push("nearIntents.serviceUrl must be at most 512 characters");
 
-  let appFees;
-  if (value.appFees !== undefined) {
-    if (!Array.isArray(value.appFees) || value.appFees.length > 3) {
-      errors.push("nearIntents.appFees must be a list of at most 3 fees");
-    } else {
-      appFees = value.appFees.map((fee, index) => {
-        const label = `nearIntents.appFees[${index}]`;
-        if (!isRecord(fee)) {
-          errors.push(`${label} must be an object`);
-          return undefined;
-        }
-        if (
-          typeof fee.recipient !== "string" ||
-          !NEAR_INTENTS_FEE_RECIPIENT.test(fee.recipient)
-        )
-          errors.push(`${label}.recipient must be a NEAR account name`);
-        if (!Number.isSafeInteger(fee.fee) || fee.fee < 0 || fee.fee > 1000)
-          errors.push(`${label}.fee must be an integer from 0 to 1000`);
-        return { recipient: fee.recipient, fee: fee.fee };
-      });
-      const total = value.appFees.reduce(
-        (sum, fee) => sum + (isRecord(fee) && Number.isSafeInteger(fee.fee) ? fee.fee : 0),
-        0,
-      );
-      if (total > 1000)
-        errors.push("nearIntents.appFees must total at most 1000");
-    }
-  }
+  // No `appFees`: NEAR sets the fees up on the partner key, and the wallet does not read a fee list.
 
   // Every 1Click asset id in the section, Miden ones included: a token must not repeat one.
   const assetIds = new Set();
@@ -1055,7 +1026,6 @@ function readNearIntents(value, on, network, allowLocalHttp, errors) {
   if (errors.length > before) return undefined;
   return {
     serviceUrl,
-    ...(appFees === undefined ? {} : { appFees }),
     chains,
     midenAssets,
   };
