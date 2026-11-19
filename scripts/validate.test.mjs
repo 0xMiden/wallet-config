@@ -44,6 +44,21 @@ test("published documents use the new schema", async () => {
   for (const file of ["testnet.json", "devnet.json", "mainnet.json"])
     assert.deepEqual((await validateFile(file, { smoke: false })).errors, []);
 });
+test("open fullscreen defaults on and only accepts boolean overrides", () => {
+  const body = copy();
+  delete body.features.openFullscreen;
+  assert.equal(
+    parseBridgeConfigDetailed(body, "testnet").config.features.openFullscreen,
+    true,
+  );
+  body.features.openFullscreen = false;
+  assert.equal(
+    parseBridgeConfigDetailed(body, "testnet").config.features.openFullscreen,
+    false,
+  );
+  body.features.openFullscreen = "false";
+  assert.ok(errors(body).includes("features.openFullscreen must be boolean"));
+});
 test("bad route data rejects the document", async (t) => {
   const cases = [
     (b) => {
@@ -478,7 +493,7 @@ test("smoke checks report contract and service failures", async (t) => {
 });
 
 test("preserves the published feature keys and validates their boolean values", () => {
-  assert.deepEqual(source.features, { earn: true, fastBridge: true, bridgeIn: true, bridgeOut: true });
+  assert.deepEqual(source.features, { earn: true, fastBridge: true, bridgeIn: true, bridgeOut: true, openFullscreen: true });
   for (const name of Object.keys(source.features)) {
     const body = copy();
     body.features[name] = false;

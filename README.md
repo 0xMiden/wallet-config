@@ -21,7 +21,9 @@ the solver's `/v2/pairs` endpoint.
 ## Bridge configuration
 
 `features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`,
-`nearIntents` and `arcadeGcPurchase`. Each value must be a boolean; an omitted
+`nearIntents`, `arcadeGcPurchase`, and `openFullscreen`. `openFullscreen` defaults
+to `true`; set it to `false` to hide the extension's “Open fullscreen” launcher
+without disabling fullscreen routes. Each value must be a boolean; an omitted
 `nearIntents` or `arcadeGcPurchase` defaults to `false`. `arcadeGcPurchase`
 turns on buying Game Coins in Arcade and requires the `arcade` section (see
 [Arcade GC sale](#arcade-gc-sale)). `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
