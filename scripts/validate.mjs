@@ -277,6 +277,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     "bridgeOut",
     "nearIntents",
     "arcadeGcPurchase",
+    "openFullscreen",
   ];
   for (const name of featureNames) {
     if (featuresIn[name] !== undefined && typeof featuresIn[name] !== "boolean")
@@ -545,6 +546,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
             earn: featuresIn.earn === true,
             nearIntents: featuresIn.nearIntents === true,
             arcadeGcPurchase: featuresIn.arcadeGcPurchase === true,
+            openFullscreen: featuresIn.openFullscreen !== false,
           },
           "bridge-providers": providers,
           supportedEvmChains: chains,

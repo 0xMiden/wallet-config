@@ -1,7 +1,13 @@
 {
   "network": "devnet",
-  "version": 4,
-  "features": { "earn": false, "fastBridge": false, "bridgeIn": false, "bridgeOut": false },
+  "version": 5,
+  "features": {
+    "earn": false,
+    "fastBridge": false,
+    "bridgeIn": false,
+    "bridgeOut": false,
+    "openFullscreen": true
+  },
   "geo": {
     "wallet": {
       "block CU": "yes",
