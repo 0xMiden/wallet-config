@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 21,
+  "version": 22,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
@@ -52,7 +52,7 @@
     "bridgeOut": true,
     "nearIntents": false,
     "arcadeGcPurchase": true,
-    "openFullscreen": true
+    "openFullscreen": false
   },
   "arcade": {
     "sale": {
