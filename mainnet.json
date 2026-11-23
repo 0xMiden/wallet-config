@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 22,
+  "version": 23,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
@@ -52,7 +52,11 @@
     "bridgeOut": true,
     "nearIntents": false,
     "arcadeGcPurchase": true,
-    "openFullscreen": false
+    "openFullscreen": false,
+    "encryptedBackup": true
+  },
+  "backup": {
+    "baseUrl": "https://miden-wallet-api.utkarsh-s.workers.dev"
   },
   "arcade": {
     "sale": {
