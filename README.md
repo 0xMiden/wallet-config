@@ -14,7 +14,7 @@ Epoch fast bridge transfers (`fastBridge`) carry USDC to and from USDCx on Ether
 Base, Arbitrum and Polygon, native ETH to and from Miden ETH on Ethereum, Base and
 Arbitrum, and native POL to and from Miden POL on Polygon. The Arbitrum and Polygon
 Epoch routes list no Earn vault. The Robinhood Chain route lists native ETH and USDG,
-both ways; its USDC is not listed until Epoch quotes it. NEAR intents stay off. Mainnet Swap uses
+both ways; its USDC is not listed until Epoch quotes it. NEAR intents are on for USDC on Arbitrum, delivered as USDCx (see `nearIntents` in mainnet.json). Mainnet Swap uses
 `https://api.forkchoice.xyz`; the current wallet reads tokens and pairs from
 the solver's `/v2/pairs` endpoint.
 
@@ -26,10 +26,10 @@ to `true`; set it to `false` to hide the extension's “Open fullscreen” launc
 without disabling fullscreen routes. Each value must be a boolean; an omitted
 `nearIntents` or `arcadeGcPurchase` defaults to `false`. `arcadeGcPurchase`
 turns on buying Game Coins in Arcade and requires the `arcade` section (see
-[Arcade GC sale](#arcade-gc-sale)). `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
-until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
-configuration have been verified. Do not enable it with placeholder production
-URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
+[Arcade GC sale](#arcade-gc-sale)). `nearIntents` controls NEAR swaps routed through 1Click and needs the top-level
+`nearIntents` section (`serviceUrl`, `midenAssets`, `chains`). Every `assetId`,
+`decimals` and faucet id must match the live 1Click `/v0/tokens` list. Do not
+enable it with placeholder production URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
 Epoch transfers in both directions. `bridgeIn` and `bridgeOut` control Agglayer
 deposits and withdrawals. A false global switch disables new transfers even when
 a chain route is enabled. When a bridge switch is omitted, the per-chain switches apply.
