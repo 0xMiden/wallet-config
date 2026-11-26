@@ -1,0 +1,1 @@
+{"_expect": "features.relayDeposit must be boolean", "network": "testnet", "version": 1, "features": {"relayDeposit": "true"}, "supportedEvmChains": {"sepolia": {"chainId": 11155111, "bridges": {}}}}

@@ -18,6 +18,7 @@ import {
   MAX_EARN_VAULT_LOGO_BYTES,
   earnLogoErrors,
   evmRpc,
+  keccak256,
   parseBridgeConfig,
   parseBridgeConfigDetailed,
   main,
@@ -537,6 +538,213 @@ test("the Arcade GC sale exists exactly while its switch is on and names the sel
   assert.deepEqual(errors(on), []);
   on.features.arcadeGcPurchase = "true";
   assert.ok(errors(on).some((error) => error.includes("features.arcadeGcPurchase")));
+});
+
+const RELAY_CALIBUR = "0x000000009b1d0af20d8c6d0a44e162d11f9b8f00";
+const RELAY_RUNTIME_HASH =
+  "0x7fa1bd2edb51499cb83a324acd9d0f35b31774cf8894e26fc13ac0474f4f57a4";
+const relayFixture = () =>
+  JSON.parse(
+    readFileSync(new URL("./fixtures/good/testnet-relay.json", import.meta.url)),
+  );
+const relayErrors = (relay, features = { relayDeposit: true }) =>
+  errors({ ...relayFixture(), features, relay });
+
+test("keccak256 gives the Ethereum hash", () => {
+  assert.equal(
+    keccak256(new Uint8Array()),
+    "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+  );
+  assert.equal(
+    keccak256(Buffer.from("abc")),
+    "0x4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45",
+  );
+  // One byte under, at and over the 136-byte rate, where the padding moves to a new block.
+  for (const [length, hash] of [
+    [135, "0x34367dc248bbd832f4e3e69dfaac2f92638bd0bbd18f2912ba4ef454919cf446"],
+    [136, "0xa6c4d403279fe3e0af03729caada8374b5ca54d8065329a3ebcaeb4b60aa386e"],
+    [137, "0xd869f639c7046b4929fc92a4d988a8b22c55fbadb802c0c66ebcd484f1915f39"],
+  ])
+    assert.equal(keccak256(new Uint8Array(length).fill(0x61)), hash, `${length}`);
+});
+
+test("the relay is off with no section while its switch is absent or false", () => {
+  const body = copy();
+  delete body.relay;
+  delete body.features.relayDeposit;
+  const absent = parseBridgeConfigDetailed(body, "testnet");
+  assert.deepEqual(absent.errors, []);
+  assert.equal(absent.config.features.relayDeposit, undefined);
+  assert.equal("relay" in absent.config, false);
+  body.features.relayDeposit = false;
+  const off = parseBridgeConfigDetailed(body, "testnet");
+  assert.deepEqual(off.errors, []);
+  assert.equal(off.config.features.relayDeposit, false);
+  assert.equal("relay" in off.config, false);
+});
+
+test("reads the relay section with its addresses and hash in lower case", () => {
+  const parsed = parseBridgeConfigDetailed(relayFixture(), "testnet");
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.config.features.relayDeposit, true);
+  assert.deepEqual(parsed.config.relay, {
+    baseUrl: "https://relay.example/v1",
+    executor: "0x1111111111111111111111111111111111111111",
+    calibur: {
+      address: RELAY_CALIBUR,
+      runtimeHash: RELAY_RUNTIME_HASH,
+      domainName: "Calibur",
+      domainVersion: "1.0.0",
+    },
+    maxFee: {
+      [EPOCH_NATIVE_TOKEN]: "1000000000000000",
+      "0x2bb4ffd7e2c6d432b697554efd77fa13bdbefd69": "2500000",
+    },
+    feeRecipient: "0xfefefefefefefefefefefefefefefefefefefefe",
+  });
+});
+
+test("the relay takes no fee map, an empty one, the largest uint256 and unknown keys", () => {
+  const { relay } = relayFixture();
+  delete relay.maxFee;
+  delete relay.feeRecipient;
+  const bare = parseBridgeConfig({ ...relayFixture(), relay }, "testnet").relay;
+  assert.deepEqual(bare.maxFee, {});
+  assert.equal("feeRecipient" in bare, false);
+  const max = (2n ** 256n - 1n).toString();
+  const wide = parseBridgeConfig(
+    {
+      ...relayFixture(),
+      relay: {
+        ...relay,
+        baseUrl: "https://Relay.Example",
+        maxFee: { [EPOCH_NATIVE_TOKEN]: max },
+        extra: 1,
+        // The per-chain list of an older document shape: the wallet ignores it.
+        chains: { sepolia: { executor: "0x2222222222222222222222222222222222222222" } },
+      },
+    },
+    "testnet",
+  ).relay;
+  assert.equal(wide.baseUrl, "https://relay.example");
+  assert.deepEqual(wide.maxFee, { [EPOCH_NATIVE_TOKEN]: max });
+  assert.deepEqual(relayErrors({ ...relay, maxFee: {} }), []);
+});
+
+test("the relay section exists exactly while its switch is on", () => {
+  const { relay } = relayFixture();
+  assert.ok(
+    relayErrors(undefined).includes(
+      "relay is required while features.relayDeposit is on",
+    ),
+  );
+  for (const features of [{}, { relayDeposit: false }])
+    assert.ok(
+      relayErrors(relay, features).includes(
+        "relay must be omitted while features.relayDeposit is off",
+      ),
+    );
+  assert.ok(
+    relayErrors(relay, { relayDeposit: "true" }).includes(
+      "features.relayDeposit must be boolean",
+    ),
+  );
+});
+
+test("reports the reason each bad relay fixture names", () => {
+  const root = new URL("./fixtures/bad/", import.meta.url);
+  const names = readdirSync(root).filter((file) => file.startsWith("relay-"));
+  assert.ok(names.length > 0);
+  for (const name of names) {
+    const { _expect, ...body } = JSON.parse(readFileSync(new URL(name, root)));
+    const found = errors(body);
+    assert.ok(found.includes(_expect), `${name}: ${found}`);
+  }
+});
+
+test("relay keys repeated in the source are refused before JSON loses them", async (t) => {
+  const { relay, ...rest } = relayFixture();
+  const prefix = JSON.stringify(rest).slice(0, -1);
+  const section = JSON.stringify(relay).slice(1, -1);
+  const calibur = JSON.stringify(relay.calibur).slice(1, -1);
+  const cases = [
+    [`"relay":{${section}},"relay":{${section}}`, "document repeats relay"],
+    [
+      `"relay":{${section},"executor":"0x2222222222222222222222222222222222222222"}`,
+      "relay repeats executor",
+    ],
+    [
+      `"relay":{${section.replace(calibur, `${calibur},"domainVersion":"2.0.0"`)}}`,
+      "relay.calibur repeats domainVersion",
+    ],
+    [
+      `"relay":{${section.replace('"2500000"', '"2500000","0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69":"1"')}}`,
+      "relay.maxFee repeats 0x2BB4FfD7E2c6D432b697554Efd77fA13bdbefd69",
+    ],
+  ];
+  const root = mkdtempSync(path.join(tmpdir(), "config-relay-test-"));
+  try {
+    for (const [text, expected] of cases)
+      await t.test(expected, async () => {
+        writeFileSync(path.join(root, "testnet.json"), `${prefix},${text}}`);
+        const result = await validateFile("testnet.json", { root, smoke: false });
+        assert.ok(result.errors.includes(expected), JSON.stringify(result.errors));
+      });
+    writeFileSync(path.join(root, "testnet.json"), `${prefix},"relay":{${section}}}`);
+    assert.deepEqual(
+      (await validateFile("testnet.json", { root, smoke: false })).errors,
+      [],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("plans the Calibur code hash check on every supported chain while the relay is on", () => {
+  const config = parseBridgeConfig(relayFixture(), "testnet");
+  assert.deepEqual(
+    plannedChecks(config).map(({ key }) => key),
+    [
+      "chain:11155111",
+      `calibur:11155111:${RELAY_CALIBUR}`,
+      "chain:84532",
+      `calibur:84532:${RELAY_CALIBUR}`,
+    ],
+  );
+  const off = relayFixture();
+  delete off.relay;
+  off.features.relayDeposit = false;
+  assert.deepEqual(plannedChecks(parseBridgeConfig(off, "testnet")), []);
+});
+
+/** A fake chain world in which the Calibur address has the code `code` on every chain. */
+function caliburWorld(code) {
+  return async (url, init) => {
+    const { method, params } = JSON.parse(init.body);
+    switch (method) {
+      case "eth_chainId":
+        return Response.json({
+          result: url.includes("sepolia.base.org") ? "0x14a34" : "0xaa36a7",
+        });
+      case "eth_getCode":
+        assert.equal(params[0], RELAY_CALIBUR);
+        return Response.json({ result: code });
+      default:
+        throw new Error(`unexpected ${method}`);
+    }
+  };
+}
+
+test("passes Calibur code with the pinned hash, and fails no code or other code", async () => {
+  const config = parseBridgeConfig(relayFixture(), "testnet");
+  const code = "0x6080604052";
+  config.relay.calibur.runtimeHash = keccak256(Buffer.from(code.slice(2), "hex"));
+  const passed = await smokeTest(config, caliburWorld(code));
+  assert.deepEqual(passed.map((result) => result.ok), [true, true, true, true]);
+  for (const other of ["0x", "0x6080604053"]) {
+    const failed = await smokeTest(config, caliburWorld(other));
+    assert.deepEqual(failed.map((result) => result.ok), [true, false, true, false]);
+  }
 });
 
 test("nearIntents defaults off and accepts only explicit booleans", () => {

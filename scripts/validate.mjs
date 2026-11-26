@@ -53,6 +53,11 @@ export const MAX_EARN_VAULT_ABOUT_LENGTH = 200;
 export const EARN_POOLS_PAGE_SIZE = 400;
 /** The largest vault logo file the repository serves. */
 export const MAX_EARN_VAULT_LOGO_BYTES = 64 * 1024;
+/** The longest EIP-712 domain name and version of the relay's Calibur contract (schema.ts MAX_RELAY_DOMAIN_*). */
+export const MAX_RELAY_DOMAIN_NAME_LENGTH = 32;
+export const MAX_RELAY_DOMAIN_VERSION_LENGTH = 16;
+/** The address that names no account: the relay refuses it for an address that gets authority or funds. */
+export const ZERO_EVM_ADDRESS = "0x0000000000000000000000000000000000000000";
 /** The networks whose failed live checks are warnings; on the others they fail the document. */
 export const WARN_ONLY_LIVE_CHECK_NETWORKS = ["testnet"];
 
@@ -69,6 +74,11 @@ const BRIDGE_TOKEN_SYMBOL = /^[A-Z0-9]{1,11}$/;
 const GUARDIAN_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // A Guardian's key commitment as `GET /pubkey` serves it: a 32-byte 0x word.
 const GUARDIAN_COMMITMENT = /^0x[0-9a-fA-F]{64}$/;
+// A keccak256 hash, such as the Calibur runtime code hash: a 32-byte 0x word.
+const BYTES32 = /^0x[0-9a-fA-F]{64}$/;
+// A uint256 above zero as a decimal string, with no sign and no leading zero.
+const POSITIVE_DECIMAL = /^[1-9][0-9]*$/;
+const UINT256_LIMIT = 2n ** 256n;
 // C0 controls, DEL and C1 controls: none belongs in a line of text the wallet shows.
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
 // An Earn vault id: a lower-case letter, then lower-case letters, digits and hyphens.
@@ -277,6 +287,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     "bridgeOut",
     "nearIntents",
     "arcadeGcPurchase",
+    "relayDeposit",
     "openFullscreen",
   ];
   for (const name of featureNames) {
@@ -521,6 +532,11 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
     featuresIn.arcadeGcPurchase === true,
     errors,
   );
+  const relay = readRelay(
+    body.relay,
+    featuresIn.relayDeposit === true,
+    errors,
+  );
   const onboarding = readSection(body, "onboarding", errors);
   if (
     onboarding.inviteOnly !== undefined &&
@@ -557,6 +573,7 @@ export function parseBridgeConfigDetailed(body, network, options = {}) {
           ...(guardians === undefined ? {} : { guardians }),
           ...(earn === undefined ? {} : { earn }),
           ...(arcade === undefined ? {} : { arcade }),
+          ...(relay === undefined ? {} : { relay }),
         },
     errors,
     dropped,
@@ -817,6 +834,168 @@ function readArcade(value, purchaseOn, errors) {
   if (seller === undefined && value.sale.seller === undefined)
     errors.push("arcade.sale.seller is required");
   return seller === undefined ? undefined : { sale: { seller } };
+}
+
+/**
+ * The deposit-address relay (schema.ts readRelay): the wallet shows the account's own EVM address as a
+ * deposit address, that address delegates to Calibur under EIP-7702, the wallet signs a batch of calls
+ * and the relay service submits it and pays the gas. The section exists exactly while
+ * `features.relayDeposit` is on, so a stale executor or Calibur pin cannot linger behind a
+ * switched-off feature. One set of values applies to every chain of `supportedEvmChains`. A bad field
+ * rejects the document; an unknown key is ignored, as the wallet ignores it (an older `chains` list too).
+ * Addresses and the hash are accepted in any letter case and kept in lower case.
+ */
+function readRelay(value, relayOn, errors) {
+  if (value === undefined) {
+    if (relayOn)
+      errors.push("relay is required while features.relayDeposit is on");
+    return undefined;
+  }
+  if (!relayOn)
+    errors.push("relay must be omitted while features.relayDeposit is off");
+  if (!isRecord(value)) {
+    errors.push("relay must be an object");
+    return undefined;
+  }
+  const baseUrl = readRelayBaseUrl(value.baseUrl, errors);
+  const executor = readNonZeroAddress(value, "relay", "executor", errors);
+  if (value.executor === undefined) errors.push("relay.executor is required");
+  const calibur = isRecord(value.calibur) ? value.calibur : {};
+  if (!isRecord(value.calibur)) errors.push("relay.calibur must be an object");
+  const address = readNonZeroAddress(calibur, "relay.calibur", "address", errors);
+  if (isRecord(value.calibur) && calibur.address === undefined)
+    errors.push("relay.calibur.address is required");
+  const runtimeHash = readPattern(
+    calibur,
+    "relay.calibur",
+    "runtimeHash",
+    BYTES32,
+    "a 32-byte 0x hash",
+    errors,
+  );
+  if (isRecord(value.calibur) && calibur.runtimeHash === undefined)
+    errors.push("relay.calibur.runtimeHash is required");
+  const domainName = isRecord(value.calibur)
+    ? readGuardianLabel(
+        calibur,
+        "relay.calibur",
+        "domainName",
+        errors,
+        MAX_RELAY_DOMAIN_NAME_LENGTH,
+      )
+    : undefined;
+  const domainVersion = isRecord(value.calibur)
+    ? readGuardianLabel(
+        calibur,
+        "relay.calibur",
+        "domainVersion",
+        errors,
+        MAX_RELAY_DOMAIN_VERSION_LENGTH,
+      )
+    : undefined;
+  const maxFee = readRelayMaxFee(value.maxFee, errors);
+  // The fee recipient receives funds, so the zero address is refused like the executor.
+  const feeRecipient = readNonZeroAddress(value, "relay", "feeRecipient", errors);
+  return {
+    baseUrl,
+    executor,
+    calibur: { address, runtimeHash, domainName, domainVersion },
+    maxFee,
+    ...(feeRecipient === undefined ? {} : { feeRecipient }),
+  };
+}
+
+/**
+ * The relay service's base URL as the wallet reads it (schema.ts backupBaseUrl): an absolute https URL
+ * with a host and no credentials, query, fragment or trailing slash. Unlike the service URLs above, a
+ * trailing slash is refused rather than dropped, and the local http allowance does not apply.
+ */
+function readRelayBaseUrl(value, errors) {
+  const name = "relay.baseUrl";
+  if (value === undefined) {
+    errors.push(`${name} is required`);
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    errors.push(`${name} must be a URL string`);
+    return undefined;
+  }
+  if (value.endsWith("/")) {
+    errors.push(`${name} must not end with a slash`);
+    return undefined;
+  }
+  if (value.includes("?") || value.includes("#")) {
+    errors.push(`${name} must not carry credentials, a query or a fragment`);
+    return undefined;
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    errors.push(`${name} is not a URL`);
+    return undefined;
+  }
+  if (url.protocol !== "https:" || url.hostname === "") {
+    errors.push(`${name} must use https: with a host`);
+    return undefined;
+  }
+  if (url.username !== "" || url.password !== "") {
+    errors.push(`${name} must not carry credentials, a query or a fragment`);
+    return undefined;
+  }
+  return `${url.origin}${url.pathname === "/" ? "" : url.pathname}`;
+}
+
+/** An optional EVM address that gets authority or funds, so never the zero address; lower case. */
+function readNonZeroAddress(section, label, field, errors) {
+  const address = readPattern(
+    section,
+    label,
+    field,
+    EVM_ADDRESS,
+    "a 20-byte 0x address",
+    errors,
+  );
+  if (address !== ZERO_EVM_ADDRESS) return address;
+  errors.push(`${label}.${field} must not be the zero address`);
+  return undefined;
+}
+
+/**
+ * The highest fee the wallet accepts per fee token, keyed by the token address (the zero address is the
+ * chain's native coin), as a positive uint256 decimal string: a JSON number loses precision above 2^53.
+ * Optional, and can be empty. Two keys that differ only in letter case are ambiguous and refused; a key
+ * repeated exactly is refused from the source text (`validateFile`), because JSON parsing keeps only one.
+ */
+function readRelayMaxFee(value, errors) {
+  if (value === undefined) return {};
+  if (!isRecord(value)) {
+    errors.push("relay.maxFee must be an object");
+    return {};
+  }
+  const maxFee = {};
+  const seen = new Set();
+  for (const [token, amount] of Object.entries(value)) {
+    if (!EVM_ADDRESS.test(token)) {
+      errors.push(`relay.maxFee key ${token} must be a 20-byte 0x address`);
+      continue;
+    }
+    const address = token.toLowerCase();
+    if (seen.has(address)) errors.push(`relay.maxFee names ${address} twice`);
+    seen.add(address);
+    if (
+      typeof amount !== "string" ||
+      !POSITIVE_DECIMAL.test(amount) ||
+      BigInt(amount) >= UINT256_LIMIT
+    ) {
+      errors.push(
+        `relay.maxFee.${token} must be a positive uint256 as a decimal string`,
+      );
+      continue;
+    }
+    maxFee[address] = amount;
+  }
+  return maxFee;
 }
 
 /**
@@ -1212,6 +1391,26 @@ export function plannedChecks(config, { publishedGuardians = [] } = {}) {
       });
     }
   }
+  // The relay names no chain list: it applies to every chain of `supportedEvmChains`, whatever the
+  // route switches say. So while it is on, each of those chains must hold the pinned Calibur code.
+  if (config.relay !== undefined) {
+    const { address, runtimeHash } = config.relay.calibur;
+    for (const [name, chain] of Object.entries(config.supportedEvmChains)) {
+      add({
+        key: `chain:${chain.chainId}`,
+        kind: "evm-chain",
+        chainId: chain.chainId,
+      });
+      add({
+        key: `calibur:${chain.chainId}:${address}`,
+        kind: "evm-code-hash",
+        chainId: chain.chainId,
+        address,
+        runtimeHash,
+        label: `${name} relay Calibur`,
+      });
+    }
+  }
   return [...checks.values()];
 }
 
@@ -1323,6 +1522,88 @@ async function earnPools(check, fetchImpl) {
       };
 }
 
+const LANE_MASK = (1n << 64n) - 1n;
+// The keccak-f[1600] rotation offset of each lane, indexed x + 5y.
+const KECCAK_ROTATIONS = [
+  0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43, 25, 39, 41, 45, 15, 21, 8,
+  18, 2, 61, 56, 14,
+].map(BigInt);
+// The 24 round constants, from the LFSR of the Keccak reference.
+const KECCAK_ROUND_CONSTANTS = (() => {
+  const constants = [];
+  let register = 1;
+  for (let round = 0; round < 24; round++) {
+    let constant = 0n;
+    for (let bit = 0; bit < 7; bit++) {
+      register = ((register << 1) ^ ((register >> 7) * 0x71)) % 256;
+      if (register & 2) constant ^= 1n << BigInt((1 << bit) - 1);
+    }
+    constants.push(constant);
+  }
+  return constants;
+})();
+
+const rotateLane = (lane, offset) =>
+  offset === 0n
+    ? lane
+    : ((lane << offset) | (lane >> (64n - offset))) & LANE_MASK;
+
+function keccakPermute(state) {
+  for (const constant of KECCAK_ROUND_CONSTANTS) {
+    const columns = [0, 1, 2, 3, 4].map(
+      (x) => state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^ state[x + 20],
+    );
+    for (let x = 0; x < 5; x++) {
+      const mix =
+        columns[(x + 4) % 5] ^ rotateLane(columns[(x + 1) % 5], 1n);
+      for (let y = 0; y < 25; y += 5) state[x + y] ^= mix;
+    }
+    const moved = new Array(25);
+    for (let x = 0; x < 5; x++)
+      for (let y = 0; y < 5; y++)
+        moved[y + 5 * ((2 * x + 3 * y) % 5)] = rotateLane(
+          state[x + 5 * y],
+          KECCAK_ROTATIONS[x + 5 * y],
+        );
+    for (let y = 0; y < 25; y += 5)
+      for (let x = 0; x < 5; x++)
+        state[x + y] =
+          moved[x + y] ^
+          (~moved[((x + 1) % 5) + y] & LANE_MASK & moved[((x + 2) % 5) + y]);
+    state[0] ^= constant;
+  }
+}
+
+/**
+ * The Ethereum keccak256 of `bytes` as a lower-case 0x word. Node 22's OpenSSL has no keccak-256
+ * digest (its sha3-256 pads differently), so the check that compares deployed code with a pinned
+ * runtime hash computes it here.
+ */
+export function keccak256(bytes) {
+  const rate = 136;
+  const padded = new Uint8Array((Math.floor(bytes.length / rate) + 1) * rate);
+  padded.set(bytes);
+  padded[bytes.length] ^= 0x01;
+  padded[padded.length - 1] ^= 0x80;
+  const state = new Array(25).fill(0n);
+  for (let offset = 0; offset < padded.length; offset += rate) {
+    for (let lane = 0; lane < rate / 8; lane++) {
+      let value = 0n;
+      for (let byte = 7; byte >= 0; byte--)
+        value = (value << 8n) | BigInt(padded[offset + lane * 8 + byte]);
+      state[lane] ^= value;
+    }
+    keccakPermute(state);
+  }
+  let hex = "0x";
+  for (let lane = 0; lane < 4; lane++)
+    for (let byte = 0; byte < 8; byte++)
+      hex += Number((state[lane] >> BigInt(8 * byte)) & 0xffn)
+        .toString(16)
+        .padStart(2, "0");
+  return hex;
+}
+
 /** JSON-RPC against each of the chain's RPCs in turn; the first answer wins. */
 export async function evmRpc(chainId, method, params, fetchImpl) {
   const failures = [];
@@ -1385,6 +1666,29 @@ async function runCheck(check, config, fetchImpl) {
         : {
             ok: false,
             detail: `${check.address} has no code on chain ${check.chainId}`,
+          };
+    }
+    case "evm-code-hash": {
+      const code = await evmRpc(
+        check.chainId,
+        "eth_getCode",
+        [check.address, "latest"],
+        fetchImpl,
+      );
+      if (!/^0x([0-9a-fA-F]{2})+$/.test(code))
+        return {
+          ok: false,
+          detail: `${check.address} has no code on chain ${check.chainId}`,
+        };
+      const hash = keccak256(Buffer.from(code.slice(2), "hex"));
+      return hash === check.runtimeHash
+        ? {
+            ok: true,
+            detail: `${check.address} has ${(code.length - 2) / 2} bytes of code with the pinned runtime hash`,
+          }
+        : {
+            ok: false,
+            detail: `${check.address} code on chain ${check.chainId} hashes to ${hash}, not the pinned ${check.runtimeHash}`,
           };
     }
     case "evm-uint": {
@@ -1509,6 +1813,13 @@ export function duplicateKeys(text, target) {
   return [...duplicates];
 }
 
+/** The objects of the relay section whose repeated keys the source text check refuses. */
+const RELAY_OBJECTS = [
+  ["relay"],
+  ["relay", "calibur"],
+  ["relay", "maxFee"],
+];
+
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -1558,8 +1869,15 @@ export async function validateFile(
     ...duplicateKeys(text, ["supportedEvmChains"]).map(
       (key) => `supportedEvmChains repeats ${key}`,
     ),
-    ...duplicateKeys(text, []).filter((key) => key === "geo").map(
-      (key) => `document repeats ${key}`,
+    ...duplicateKeys(text, [])
+      .filter((key) => key === "geo" || key === "relay")
+      .map((key) => `document repeats ${key}`),
+    // JSON parsing keeps only the last of a repeated key, so a repeated executor, Calibur pin or fee
+    // token would pass unseen.
+    ...RELAY_OBJECTS.flatMap((target) =>
+      duplicateKeys(text, target).map(
+        (key) => `${target.join(".")} repeats ${key}`,
+      ),
     ),
     ...duplicateKeys(text, ["geo"]).map((key) => `geo repeats ${key}`),
     ...GEO_FEATURES.flatMap((feature) =>
