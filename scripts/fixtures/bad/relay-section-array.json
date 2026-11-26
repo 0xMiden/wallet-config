@@ -1,0 +1,1 @@
+{"_expect": "relay must be an object", "network": "testnet", "version": 1, "features": {"relayDeposit": true}, "supportedEvmChains": {"sepolia": {"chainId": 11155111, "bridges": {}}}, "relay": []}

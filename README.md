@@ -4,7 +4,9 @@ The wallet reads one network document from
 `https://raw.githubusercontent.com/0xMiden/wallet-config/main/<network>.json`.
 A changed document must have a higher `version`. The `network` must match the file name.
 
-Testnet is fully configured. Devnet keeps its published disabled document.
+Testnet is fully configured. Testnet turns on the deposit-address relay; Calibur
+has no code on Arc testnet, so the final command warns for that chain and the
+relay cannot serve it. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
 Mainnet Earn deposits are paused: both Aave V3 USDC vaults, on Base and Ethereum,
@@ -21,12 +23,13 @@ the solver's `/v2/pairs` endpoint.
 ## Bridge configuration
 
 `features` keeps the switches `earn`, `fastBridge`, `bridgeIn`, `bridgeOut`,
-`nearIntents`, `arcadeGcPurchase`, and `openFullscreen`. `openFullscreen` defaults
+`nearIntents`, `arcadeGcPurchase`, `relayDeposit`, and `openFullscreen`. `openFullscreen` defaults
 to `true`; set it to `false` to hide the extension's “Open fullscreen” launcher
 without disabling fullscreen routes. Each value must be a boolean; an omitted
-`nearIntents` or `arcadeGcPurchase` defaults to `false`. `arcadeGcPurchase`
+`nearIntents`, `arcadeGcPurchase` or `relayDeposit` defaults to `false`. `arcadeGcPurchase`
 turns on buying Game Coins in Arcade and requires the `arcade` section (see
-[Arcade GC sale](#arcade-gc-sale)). `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
+[Arcade GC sale](#arcade-gc-sale)). `relayDeposit` turns on the deposit-address
+relay and requires the `relay` section (see [Deposit-address relay](#deposit-address-relay)). `nearIntents` controls NEAR swaps routed through 1Click. Keep it false
 until 1Click lists Miden and the NEAR token mappings, proxy, and receipt
 configuration have been verified. Do not enable it with placeholder production
 URLs, keys, or mappings. `earn` controls new Earn deposits. `fastBridge` controls
@@ -194,6 +197,59 @@ sale note on chain by the tag the PSWAP script derives from the GC and USDCx
 faucets, prices a purchase from the note's own terms, and accepts only a note
 whose creator is this seller. Nothing else about the sale is configured here.
 
+## Deposit-address relay
+
+`relay` configures the deposit-address relay. The wallet shows the account's own
+EVM address as a deposit address. That address delegates to the Calibur smart
+account under EIP-7702. To move a deposit on, the wallet signs a batch of calls
+for Calibur, and the relay service submits the batch and pays the gas.
+
+The section exists exactly while `features.relayDeposit` is true: the switch on
+requires it, and a `relay` section while the switch is off or absent is refused,
+so a stale executor or Calibur pin cannot stay in the document.
+
+```json
+"features": { "relayDeposit": true },
+"relay": {
+  "baseUrl": "https://relay.example",
+  "executor": "0x…",
+  "calibur": {
+    "address": "0x000000009b1d0af20d8c6d0a44e162d11f9b8f00",
+    "runtimeHash": "0x7fa1bd2edb51499cb83a324acd9d0f35b31774cf8894e26fc13ac0474f4f57a4",
+    "domainName": "Calibur",
+    "domainVersion": "1.0.0"
+  },
+  "maxFee": { "0x0000000000000000000000000000000000000000": "1000000000000000" },
+  "feeRecipient": "0x…"
+}
+```
+
+| Field                   | Meaning                                                                                                                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `baseUrl`               | Required. The relay service's base URL: an absolute `https:` URL with a host, and no credentials, query, fragment or trailing slash. A trailing slash is refused, not dropped.                                                                                           |
+| `executor`              | Required. The relayer account that executes the signed batches, the same on every chain. A 20-byte `0x` address, never the zero address.                                                                                                                                |
+| `calibur.address`       | Required. The Calibur implementation the deposit address delegates to, the same on every chain. A 20-byte `0x` address, never the zero address.                                                                                                                         |
+| `calibur.runtimeHash`   | Required. The keccak256 of the deployed Calibur runtime code: a 32-byte `0x` hash.                                                                                                                                                                                       |
+| `calibur.domainName`    | Required. The EIP-712 domain name of the batch signature: 1 to 32 characters, no control character and no space at either end.                                                                                                                                          |
+| `calibur.domainVersion` | Required. The EIP-712 domain version: 1 to 16 characters, with the same text rules.                                                                                                                                                                                      |
+| `maxFee`                | Optional. The highest fee the wallet accepts per fee token, on every chain: a map from the token's 20-byte `0x` address (the zero address is the chain's native coin) to a uint256 above zero, as a decimal string with no leading zero. A token without an entry is not accepted as a fee. Absent or empty means no fee is accepted. |
+| `feeRecipient`          | Optional. The only fee recipient the wallet pays when the relay deducts its fee from the deposit. A 20-byte `0x` address, never the zero address. Without it the wallet refuses a relay that asks to deduct a fee.                                                    |
+
+Addresses and the hash are accepted in any letter case; the wallet keeps them in
+lower case. Two `maxFee` keys that differ only in letter case are refused, and
+so is a key that `relay`, `relay.calibur` or `relay.maxFee` repeats in the source
+text, because JSON parsing would keep only the last value. A fee is a string,
+not a JSON number, because a number loses precision above 2^53.
+
+The section has no chain list: the relay applies to every chain of
+`supportedEvmChains`, and the relay service tells the wallet at run time when it
+does not serve a chain. An unknown key in the section is ignored, as the wallet
+ignores it; this includes `chains`, the per-chain list of an older shape.
+
+`executor` and `calibur` are what the wallet's vault pins: the wallet signs a
+batch only for that Calibur contract and that executor. Change them only together
+with the relay service that uses them.
+
 ## Guardian operators
 
 `guardians` is optional. It lists the Guardian operators of the network in
@@ -332,6 +388,12 @@ and fails when it does not serve a listed `marketUid` (compared in lower case).
 A host without the `/pools` route (testnet's) answers 404: the command then gives
 a warning that it cannot verify the markets, not an error. `--no-smoke` skips this
 check with the others.
+
+While the relay is on, the final command also reads the code at
+`relay.calibur.address` on every chain of `supportedEvmChains`, whatever the route
+switches say, and fails when the address has no code or when the keccak256 of the
+code is not `relay.calibur.runtimeHash`. It does not call `relay.baseUrl` and does
+not check `relay.executor`. Check these values before publication.
 
 The final command also asks every listed Guardian for its key
 (`GET <endpoint>/pubkey?scheme=ecdsa`, the request the wallet makes). An
