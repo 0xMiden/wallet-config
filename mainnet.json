@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "version": 22,
+  "version": 23,
   "limits": {
     "bridgeInMaxBalanceUsd": 1232.462
   },
@@ -52,7 +52,8 @@
     "bridgeOut": true,
     "nearIntents": false,
     "arcadeGcPurchase": true,
-    "openFullscreen": false
+    "openFullscreen": false,
+    "relayDeposit": true
   },
   "arcade": {
     "sale": {
@@ -307,6 +308,16 @@
           }
         }
       }
+    }
+  },
+  "relay": {
+    "baseUrl": "https://evm-relay.invalid",
+    "executor": "0x542d7a04c31d136865c665a48388180253713722",
+    "calibur": {
+      "address": "0x000000009b1d0af20d8c6d0a44e162d11f9b8f00",
+      "runtimeHash": "0x7fa1bd2edb51499cb83a324acd9d0f35b31774cf8894e26fc13ac0474f4f57a4",
+      "domainName": "Calibur",
+      "domainVersion": "1.0.0"
     }
   }
 }
