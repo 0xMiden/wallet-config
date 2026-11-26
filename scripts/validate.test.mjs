@@ -382,6 +382,9 @@ test("duplicate chain keys are detected before JSON loses them", async () => {
 test("smoke checks use the route chain and skip disabled routes", async () => {
   const body = withoutGuardians();
   body.features.earn = false;
+  // The relay checks every chain whatever the route switches say: its own tests cover its checks.
+  body.features.relayDeposit = false;
+  delete body.relay;
   for (const chain of Object.values(body.supportedEvmChains))
     for (const bridge of Object.values(chain.bridges)) {
       bridge.depositEnabled = false;
@@ -494,12 +497,13 @@ test("smoke checks report contract and service failures", async (t) => {
 });
 
 test("preserves the published feature keys and validates their boolean values", () => {
-  assert.deepEqual(source.features, { earn: true, fastBridge: true, bridgeIn: true, bridgeOut: true, openFullscreen: true });
+  assert.deepEqual(source.features, { earn: true, fastBridge: true, bridgeIn: true, bridgeOut: true, relayDeposit: true, openFullscreen: true });
   for (const name of Object.keys(source.features)) {
     const body = copy();
     body.features[name] = false;
-    // The Earn vaults exist only while Earn is on.
+    // The Earn vaults and the relay section exist only while their switch is on.
     if (name === "earn") delete body.earn;
+    if (name === "relayDeposit") delete body.relay;
     const result = parseBridgeConfigDetailed(body, "testnet");
     assert.deepEqual(result.errors, []);
     assert.equal(result.config.features[name], false);

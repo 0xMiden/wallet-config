@@ -4,7 +4,9 @@ The wallet reads one network document from
 `https://raw.githubusercontent.com/0xMiden/wallet-config/main/<network>.json`.
 A changed document must have a higher `version`. The `network` must match the file name.
 
-Testnet is fully configured. Devnet keeps its published disabled document.
+Testnet is fully configured. Testnet turns on the deposit-address relay; Calibur
+has no code on Arc testnet, so the final command warns for that chain and the
+relay cannot serve it. Devnet keeps its published disabled document.
 Mainnet lists its Guardian operators, routes USDCx from Arc, Ethereum, Base, and
 Arbitrum, and bridges native ETH over Agglayer from Ethereum (rollup 30, "Cedar").
 Mainnet Earn deposits are paused: both Aave V3 USDC vaults, on Base and Ethereum,
